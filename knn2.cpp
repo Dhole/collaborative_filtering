@@ -7,6 +7,7 @@
  * input created by the first step and loads it as graph where each vertex
  * is a movie. It then calculates the weight of the edges between movies using
  * the vector cosine simmilarity. The result will be saved in a file.
+ * This will output the weighted graph, which can be used for other algorithms.
  */
 
 #include <string>

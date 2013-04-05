@@ -224,7 +224,7 @@ public:
         return graphlab::NO_EDGES;
     }
 
-}; // end of als vertex program
+}; // end of knn vertex program
 
 typedef graphlab::omni_engine<knn_program> engine_type;
 

@@ -42,5 +42,8 @@ requires_eigen(knn2) # build and attach eigen
 add_graphlab_executable(knn3 knn3.cpp)
 requires_eigen(knn3) # build and attach eigen
 
+add_graphlab_executable(local_calc local_calc.cpp)
+requires_eigen(local_calc) # build and attach eigen
+
 
 

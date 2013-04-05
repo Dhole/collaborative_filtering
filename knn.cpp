@@ -4,9 +4,9 @@
  * \brief The first step for KNN rating prediction
  *
  * This file contains the first step for KNN rating prediction. It reads the
- * input user ratings and creates outputs with: movie containing each user
- * rating in one line per movie (one file for training and one for validation),
- * one file containing the movie connections (two movies are connected if at 
+ * input user ratings and creates outputs with: movies containing each user
+ * rating in one line per movie (one file for training and one for validation)
+ * and one file containing the movie connections (two movies are connected if at 
  * least one same user has rated them both).
  */
 

@@ -15,10 +15,14 @@
 #include <boost/unordered_map.hpp>
 #include <math.h>
 #include <boost/math/special_functions/round.hpp>
+#include <boost/numeric/ublas/matrix.hpp>
 
 using namespace graphlab;
+using namespace boost::numeric::ublas;
 
 typedef boost::unordered_map<vertex_id_type, double> map;
+typedef boost::unordered_map<vertex_id_type, vertex_data_type> vert_map;
+typedef boost::unordered_map<vertex_id_type, int> int_map;
 
 
 /**
@@ -186,29 +190,29 @@ public:
 class gather_type_2 {
 public:
     
-    map neighs;
+    vert_map vertices;
     
     /** \brief basic default constructor */
     gather_type() { }
     
-    gather_type(graph_type::vertex_id_type vv, double obs) {
-        neighs[vv] = obs;
+    gather_type(graph_type::vertex_id_type vv, vertex_data_type data) {
+        vertices[vv] = data;
     }
     
     /** \brief Save the values to a binary archive */
-    void save(graphlab::oarchive& arc) const { arc << neighs; }
+    void save(graphlab::oarchive& arc) const { arc << vertices; }
     
     /** \brief Read the values from a binary archive */
-    void load(graphlab::iarchive& arc) { arc >> neighs; }
+    void load(graphlab::iarchive& arc) { arc >> vertices; }
     
     /** 
      * \brief joins two neighs maps
      */
     gather_type& operator+=(const gather_type& other) {
-        map other_neighs = other.neighs;
+        vert_map other_vertices = other.vertices;
         
-        for (map::iterator it = other_neighs.begin(); it != other_neighs.end(); ++it){
-            neighs[it->first] = other_neighs[it->first];
+        for (map::iterator it = other_vertices.begin(); it != other_vertices.end(); ++it){
+            vertices[it->first] = other_vertices[it->first];
         }
         return *this;
     } // end of operator+=
@@ -232,26 +236,32 @@ public:
     /** The gather function */
     gather_type gather(icontext_type& context, const vertex_type& vertex, 
                        edge_type& edge) const {
-        map wei_rat;
-        vertex_data etd = edge.target().data();
-        for (map::iterator it = etd.ratings.begin(); it != etd.ratings.end(); ++it) 
-            wei_rat[it->first] = edge.data().obs * etd.ratings[it->first];
-        
-        return gather_type(wei_rat, edge.data().obs);
+        return gather_type(edge.target.id(), edge.target.data);
     } // end of gather function
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type& sum) {
-        //for (map::iterator it; it != sum.ratings.end(); ++it)
-        //    graph.add_edge(vertex.id(), it->first);
-        map norm_knn;
-        map sum_ratings = sum.ratings;
-        map sum_weights = sum.weights;
-        for (map::const_iterator it = sum.ratings.begin(); it != sum.ratings.end(); ++it) {
-            //std::cout << "(" << vertex.id() << " " << sum_ratings[it->first] << " " << sum_weights[it->first] << ") ";
-            norm_knn[it->first] = sum_ratings[it->first] / sum_weights[it->first];
+        int_map index();
+        int mat_size = boost::size(sum.vertices);
+        zero_matrix<double> ww (mat_size, mat_size);
+        vert_map vertices = sum.vertices;
+        vertex_neighs = vertex.data().neighs;
+        
+        // Add the main vertex to the map
+        vertices[vertex.id()] = vertex.data();
+        int ind = 0;
+        index[vertex.id()] = ind;
+        ind++;
+        
+        for (map::iterator it = vertices.begin(); it != vertices.end(); ++it){
+            index[it->first] = ind;
+            ind++;
         }
-        vertex.data().ratings_knn = norm_knn;
+        
+        for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
+            ww(index[it->first] , 0)
+        }
+        
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
