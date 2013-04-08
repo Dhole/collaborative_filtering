@@ -14,15 +14,13 @@
 #include <graphlab.hpp>
 #include <boost/unordered_map.hpp>
 #include <math.h>
-#include <boost/math/special_functions/round.hpp>
 #include <boost/numeric/ublas/matrix.hpp>
 
 using namespace graphlab;
 using namespace boost::numeric::ublas;
 
 typedef boost::unordered_map<vertex_id_type, double> map;
-typedef boost::unordered_map<vertex_id_type, vertex_data_type> vert_map;
-typedef boost::unordered_map<vertex_id_type, int> int_map;
+typedef boost::unordered_map<vertex_id_type, unsigned int> int_map;
 
 
 /**
@@ -45,9 +43,11 @@ struct vertex_data {
     }
     /** \brief Load the vertex data from a binary archive */
     void load(graphlab::iarchive& arc) { 
-        arc >> ratings << neighs;
+        arc >> ratings >> neighs;
     }
 }; // end of vertex data
+
+typedef boost::unordered_map<vertex_id_type, vertex_data> vert_map;
 
 /**
  * \brief The edge data stores the weights between movies.
@@ -128,9 +128,9 @@ public:
     map neighs;
     
     /** \brief basic default constructor */
-    gather_type() { }
+    gather_type_neigh() { }
     
-    gather_type(graph_type::vertex_id_type vv, double obs) {
+    gather_type_neigh(graph_type::vertex_id_type vv, double obs) {
         neighs[vv] = obs;
     }
     
@@ -143,7 +143,7 @@ public:
     /** 
      * \brief joins two neighs maps
      */
-    gather_type& operator+=(const gather_type& other) {
+    gather_type_neigh& operator+=(const gather_type_neigh& other) {
         map other_neighs = other.neighs;
         
         for (map::iterator it = other_neighs.begin(); it != other_neighs.end(); ++it){
@@ -158,7 +158,7 @@ public:
  * \brief Collect neighbour information on each vertex
  */
 class neigh_program : 
-    public graphlab::ivertex_program<graph_type_neigh, gather_type_neigh>,
+    public graphlab::ivertex_program<graph_type, gather_type_neigh>,
     public graphlab::IS_POD_TYPE {
 public:
 
@@ -169,13 +169,13 @@ public:
     }; // end of gather_edges 
 
     /** The gather function */
-    gather_type gather(icontext_type& context, const vertex_type& vertex, 
+    gather_type_neigh gather(icontext_type& context, const vertex_type& vertex, 
                        edge_type& edge) const {
-        return gather_type(edge.target.id(), edge.data().obs);
+        return gather_type_neigh(edge.target().id(), edge.data().obs);
     } // end of gather function
 
     void apply(icontext_type& context, vertex_type& vertex,
-               const gather_type& sum) {
+               const gather_type_neigh& sum) {
         vertex.data().neighs = sum.neighs;
     } // end of apply
 
@@ -193,9 +193,9 @@ public:
     vert_map vertices;
     
     /** \brief basic default constructor */
-    gather_type() { }
+    gather_type_2() { }
     
-    gather_type(graph_type::vertex_id_type vv, vertex_data_type data) {
+    gather_type_2(graph_type::vertex_id_type vv, vertex_data data) {
         vertices[vv] = data;
     }
     
@@ -208,10 +208,10 @@ public:
     /** 
      * \brief joins two neighs maps
      */
-    gather_type& operator+=(const gather_type& other) {
+    gather_type_2& operator+=(const gather_type_2& other) {
         vert_map other_vertices = other.vertices;
         
-        for (map::iterator it = other_vertices.begin(); it != other_vertices.end(); ++it){
+        for (vert_map::iterator it = other_vertices.begin(); it != other_vertices.end(); ++it){
             vertices[it->first] = other_vertices[it->first];
         }
         return *this;
@@ -223,7 +223,7 @@ public:
  * \brief Compute the KNN for each rating in the vertices
  */
 class vertex_program : 
-    public graphlab::ivertex_program<graph_type_2, gather_type_2>,
+    public graphlab::ivertex_program<graph_type, gather_type_2>,
     public graphlab::IS_POD_TYPE {
 public:
 
@@ -234,33 +234,60 @@ public:
     }; // end of gather_edges 
 
     /** The gather function */
-    gather_type gather(icontext_type& context, const vertex_type& vertex, 
+    gather_type_2 gather(icontext_type& context, const vertex_type& vertex, 
                        edge_type& edge) const {
-        return gather_type(edge.target.id(), edge.target.data);
+        return gather_type_2(edge.target().id(), edge.target().data());
     } // end of gather function
 
     void apply(icontext_type& context, vertex_type& vertex,
-               const gather_type& sum) {
-        int_map index();
-        int mat_size = boost::size(sum.vertices);
-        zero_matrix<double> ww (mat_size, mat_size);
+               const gather_type_2& sum) {
+        int_map indices;
+        int mat_size = sum.vertices.size();
+        // Start a zero matrix
+        matrix<double> ww(mat_size, mat_size);
+        for (unsigned i = 0; i < ww.size1 (); ++ i)
+            for (unsigned j = 0; j < ww.size2 (); ++ j)
+                ww(i, j) = 0;
+        
+        // Saves all the vertices of the local graph
         vert_map vertices = sum.vertices;
-        vertex_neighs = vertex.data().neighs;
+        vert_map indexed_vertices;
+        map vertex_neighs = vertex.data().neighs;
+        map neighs_neighs;
         
-        // Add the main vertex to the map
-        vertices[vertex.id()] = vertex.data();
-        int ind = 0;
-        index[vertex.id()] = ind;
+        
+        // Map the vertices into indices
+        unsigned int ind = 0;
+        indices[vertex.id()] = ind;
         ind++;
-        
-        for (map::iterator it = vertices.begin(); it != vertices.end(); ++it){
-            index[it->first] = ind;
+        for (vert_map::iterator it = vertices.begin(); it != vertices.end(); ++it){
+            indices[it->first] = ind;
+            indexed_vertices[ind] = vertices[it->first];
             ind++;
         }
         
+        // Add the main vertex to the map
+        vertices[vertex.id()] = vertex.data();
+        indexed_vertices[0] = vertex.data();
+        
+        // Calculate adjacency matrix
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
-            ww(index[it->first] , 0)
+            ww(indices[it->first] , 0) = vertex_neighs[it->first];
         }
+        for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
+            neighs_neighs = vertices[it->first].neighs;
+            for (map::iterator it2 = neighs_neighs.begin(); it2 != neighs_neighs.end(); ++it2){
+                ww(indices[it2->first] , indices[it->first]) = neighs_neighs[it2->first];
+            }
+        }
+        
+        for (unsigned i = 0; i < ww.size1 (); ++ i) {
+            for (unsigned j = 0; j < ww.size2 (); ++ j) {
+                std::cout << ww(i, j) << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
         
     } // end of apply
 
@@ -269,11 +296,18 @@ public:
                                 const vertex_type& vertex) const {
         return graphlab::NO_EDGES;
     }
+    
+    /**
+    * \brief Signal all test vertices (25%)
+    */
+    static graphlab::empty signal_test(icontext_type& context,
+                                       const vertex_type& vertex) {
+        if(vertex.id() % 4  == 0) 
+            context.signal(vertex);
+        return graphlab::empty();
+    } // end of signal_left
 
 }; // end of als vertex program
-
-typedef graphlab::omni_engine<knn_program> engine_type;
-
 
 int main(int argc, char** argv) {
     graphlab::mpi_tools::init(argc, argv);
@@ -317,7 +351,6 @@ int main(int argc, char** argv) {
     dc.cout() << "Creating engine 1" << std::endl;
     graphlab::omni_engine<neigh_program> engine(dc, graph, "sync");
         
-    //TODO It would be optimal to just signal training movies?
     engine.signal_all();
         
     // Run neighbour information gathering
@@ -338,7 +371,7 @@ int main(int argc, char** argv) {
     graphlab::omni_engine<vertex_program> engine2(dc, graph, "sync");
         
     //TODO Signal test vertices (test user ratings)
-    // engine2.map_reduce_vertices<graphlab::empty>(vertex2_program::signal_left);
+    engine2.map_reduce_vertices<graphlab::empty>(vertex_program::signal_test);
         
     // Run 2nd engine
     dc.cout() << "Running ..." << std::endl;
