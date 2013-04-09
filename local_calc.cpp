@@ -242,13 +242,14 @@ public:
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_2& sum) {
         int_map indices;
-        int mat_size = sum.vertices.size();
-        // Start a zero matrix
+        int mat_size = sum.vertices.size() + 1;
+        // W: Adjacency Matrix
         matrix<double> ww(mat_size, mat_size);
         for (unsigned i = 0; i < ww.size1 (); ++ i)
             for (unsigned j = 0; j < ww.size2 (); ++ j)
                 ww(i, j) = 0;
-        
+        //std::cout << "check1" << std::endl;
+
         // Saves all the vertices of the local graph
         vert_map vertices = sum.vertices;
         vert_map indexed_vertices;
@@ -274,20 +275,57 @@ public:
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             ww(indices[it->first] , 0) = vertex_neighs[it->first];
         }
+        //std::cout << "check2" << std::endl;
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             neighs_neighs = vertices[it->first].neighs;
             for (map::iterator it2 = neighs_neighs.begin(); it2 != neighs_neighs.end(); ++it2){
                 ww(indices[it2->first] , indices[it->first]) = neighs_neighs[it2->first];
             }
         }
+        //std::cout << "check3" << std::endl;
         
-        for (unsigned i = 0; i < ww.size1 (); ++ i) {
+        // Print the W matrix for testing purposes (Use only with very small datasets)
+        /*for (unsigned i = 0; i < ww.size1 (); ++ i) {
             for (unsigned j = 0; j < ww.size2 (); ++ j) {
                 std::cout << ww(i, j) << " ";
             }
             std::cout << std::endl;
         }
-        std::cout << std::endl;
+        std::cout << std::endl;*/
+
+        // Calculate D: Diagonal Degree Matrix
+        matrix<double> dd(mat_size, mat_size);
+        for (unsigned i = 0; i < dd.size1 (); ++ i)
+            for (unsigned j = 0; j < dd.size2 (); ++ j)
+                dd(i, j) = 0;
+          
+        double count;
+        for (unsigned i = 0; i < ww.size1 (); ++ i) {
+            count = 0;
+            for (unsigned j = 0; j < ww.size2 (); ++ j) {
+                count += ww(i, j);
+            }
+            dd(i, i) = count;
+        }
+
+        // Calculate L: Laplacian Matrix
+        matrix<double> ll(mat_size, mat_size);
+        ll = dd - ww;
+        /*for (unsigned i = 0; i < dd.size1 (); ++ i)
+            for (unsigned j = 0; j < dd.size2 (); ++ j)
+                ll(i, j) = dd(i, j) - ww(i, j);*/
+
+        // Calculate L2: Normalized Laplacian Matrix
+        matrix<double> ll2(mat_size, mat_size);
+        matrix<double> dd2(mat_size, mat_size);
+        
+        for (unsigned i = 0; i < dd.size1 (); ++ i)
+            for (unsigned j = 0; j < dd.size2 (); ++ j)
+                dd2(i, j) = 1 / sqrt(dd(i, j));
+
+        ll2 = prod(ll, dd2);
+        ll2 = prod(dd2, ll2);
+
         
     } // end of apply
 
@@ -371,7 +409,8 @@ int main(int argc, char** argv) {
     graphlab::omni_engine<vertex_program> engine2(dc, graph, "sync");
         
     //TODO Signal test vertices (test user ratings)
-    engine2.map_reduce_vertices<graphlab::empty>(vertex_program::signal_test);
+    //engine2.map_reduce_vertices<graphlab::empty>(vertex_program::signal_test);
+    engine2.signal_all();
         
     // Run 2nd engine
     dc.cout() << "Running ..." << std::endl;
