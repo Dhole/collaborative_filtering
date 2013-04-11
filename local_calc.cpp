@@ -367,6 +367,10 @@ public:
         // Compute rating prediction
         MatrixXd mm(lim, lim);
         mm = uu_hh.transpose() * uu_hh;
+        
+        // Save the user ratings in a vector
+        VectorXd rr(mat_size - 1, 1);
+
 
         double r_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * ...
 
