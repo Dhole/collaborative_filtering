@@ -277,6 +277,26 @@ public:
         vertices[vertex.id()] = vertex.data();
         indexed_vertices[0] = vertex.data();
         
+        // Save a rating matrix, where columns are users and rows are movie ratings
+        // The rating will be 0 if the user hasn't rated the movie
+        MatrixXd rat(mat_size, indexed_vertices[0].ratings.size());
+        map indexed_users;
+        ind = 0;
+        for (map::iterator it = indexed_vertices[0].ratings.begin(); it != indexed_vertices[0].ratings.end(); ++it){
+            indexed_users[ind] = it->first;
+            rat(0, ind) = it->second;
+            ind++;
+        }
+        
+        for (unsigned i = 1; i < mat_size; ++i) {
+            for (unsigned j = 0; j < indexed_users.size(); ++j) {
+                if (indexed_vertices[i].ratings.find(indexed_users[j] == indexed_vertices[i].ratings.end()))
+                    rat(i, j) = 0;
+                else
+                    rat(i, j) = indexed_vertices[i].ratings[indexed_users[j]];
+            }
+        }
+
         // Calculate adjacency matrix
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             ww(indices[it->first] , 0) = vertex_neighs[it->first];
@@ -331,10 +351,15 @@ public:
 
         ll2 = dd2 * ll * dd2;
     
-        // Calculate limiting frequency w
+        // For each user ...
+        //
+        //
+
+        
+        // Calculate limiting frequency w for each user
         double w_lim = 0;
         for (unsigned j = 0; j < ll2.cols();  ++j)
-            w_lim += ll2(1, j) * ll2(1, j);
+            w_lim += ll2(0, j) * ll2(0, j);
         w_lim = sqrt(w_lim) + 0.001;
         
         // SVD descomposition
@@ -358,7 +383,7 @@ public:
         MatrixXd uu_hh(lim, mat_size - 1);
         
         for (unsigned i = 0; i < lim; ++i)
-            vv(i, 1) = uu_h(1, i);
+            vv(i, 0) = uu_h(0, i);
 
         for (unsigned i = 0; i < mat_size - 1; ++i)
             for (unsigned j = 0; i < lim; ++j)
