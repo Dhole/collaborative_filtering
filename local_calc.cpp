@@ -14,14 +14,18 @@
 #include <graphlab.hpp>
 #include <boost/unordered_map.hpp>
 #include <math.h>
-#include <boost/numeric/ublas/matrix.hpp>
+//#include <boost/numeric/ublas/matrix.hpp>
+#include <iostream>
+#include <Eigen/Dense>
 
 using namespace graphlab;
-using namespace boost::numeric::ublas;
+//using namespace boost::numeric::ublas;
+using namespace Eigen;
 
 typedef boost::unordered_map<vertex_id_type, double> map;
 typedef boost::unordered_map<vertex_id_type, unsigned int> int_map;
-
+//typedef Matrix<double, Dynamic, Dynamic> MatrixXd;
+//typedef Matrix<double, Dynamic, 1>       VectorXd;
 
 /**
  * \brief The vertex data stores the movie rating information.
@@ -244,9 +248,11 @@ public:
         int_map indices;
         int mat_size = sum.vertices.size() + 1;
         // W: Adjacency Matrix
-        matrix<double> ww(mat_size, mat_size);
-        for (unsigned i = 0; i < ww.size1 (); ++ i)
-            for (unsigned j = 0; j < ww.size2 (); ++ j)
+        // MatrixXd ww(mat_size, mat_size);
+        MatrixXd ww(mat_size, mat_size);
+        
+        for (unsigned i = 0; i < ww.rows();  ++i)
+            for (unsigned j = 0; j < ww.cols();  ++j)
                 ww(i, j) = 0;
         //std::cout << "check1" << std::endl;
 
@@ -285,8 +291,8 @@ public:
         //std::cout << "check3" << std::endl;
         
         // Print the W matrix for testing purposes (Use only with very small datasets)
-        /*for (unsigned i = 0; i < ww.size1 (); ++ i) {
-            for (unsigned j = 0; j < ww.size2 (); ++ j) {
+        /*for (unsigned i = 0; i < ww.rows();  ++i) {
+            for (unsigned j = 0; j < ww.cols();  ++j) {
                 std::cout << ww(i, j) << " ";
             }
             std::cout << std::endl;
@@ -294,37 +300,75 @@ public:
         std::cout << std::endl;*/
 
         // Calculate D: Diagonal Degree Matrix
-        matrix<double> dd(mat_size, mat_size);
-        for (unsigned i = 0; i < dd.size1 (); ++ i)
-            for (unsigned j = 0; j < dd.size2 (); ++ j)
+        MatrixXd dd(mat_size, mat_size);
+        for (unsigned i = 0; i < dd.rows();  ++i)
+            for (unsigned j = 0; j < dd.cols();  ++j)
                 dd(i, j) = 0;
           
         double count;
-        for (unsigned i = 0; i < ww.size1 (); ++ i) {
+        for (unsigned i = 0; i < ww.rows();  ++i) {
             count = 0;
-            for (unsigned j = 0; j < ww.size2 (); ++ j) {
+            for (unsigned j = 0; j < ww.cols();  ++j) {
                 count += ww(i, j);
             }
             dd(i, i) = count;
         }
 
         // Calculate L: Laplacian Matrix
-        matrix<double> ll(mat_size, mat_size);
+        MatrixXd ll(mat_size, mat_size);
         ll = dd - ww;
-        /*for (unsigned i = 0; i < dd.size1 (); ++ i)
-            for (unsigned j = 0; j < dd.size2 (); ++ j)
+        /*for (unsigned i = 0; i < dd.rows();  ++i)
+            for (unsigned j = 0; j < dd.cols();  ++j)
                 ll(i, j) = dd(i, j) - ww(i, j);*/
 
         // Calculate L2: Normalized Laplacian Matrix
-        matrix<double> ll2(mat_size, mat_size);
-        matrix<double> dd2(mat_size, mat_size);
+        MatrixXd ll2(mat_size, mat_size);
+        MatrixXd dd2(mat_size, mat_size);
         
-        for (unsigned i = 0; i < dd.size1 (); ++ i)
-            for (unsigned j = 0; j < dd.size2 (); ++ j)
+        for (unsigned i = 0; i < dd.rows();  ++i)
+            for (unsigned j = 0; j < dd.cols();  ++j)
                 dd2(i, j) = 1 / sqrt(dd(i, j));
 
-        ll2 = prod(ll, dd2);
-        ll2 = prod(dd2, ll2);
+        ll2 = dd2 * ll * dd2;
+    
+        // Calculate limiting frequency w
+        double w_lim = 0;
+        for (unsigned j = 0; j < ll2.cols();  ++j)
+            w_lim += ll2(1, j) * ll2(1, j);
+        w_lim = sqrt(w_lim) + 0.001;
+        
+        // SVD descomposition
+        SelfAdjointEigenSolver<MatrixXd> es(ll2);
+
+        unsigned lim;
+        for (lim = 0; lim < es.eigenvalues().rows(); ++lim)
+            if (es.eigenvalues()[lim] > w_lim):
+                break;
+
+        if (lim < 2)
+            lim = 2;
+        
+        // Find U head, U head head and v
+        MatrixXd uu_h(mat_size, lim);
+        for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
+            for (unsigned j = 0; j < lim; ++j)
+                uu_h(i, j) = es.eigenvectors(i, j);
+
+        VectorXd vv(lim, 1);
+        MatrixXd uu_hh(lim, mat_size - 1);
+        
+        for (unsigned i = 0; i < lim; ++i)
+            vv(i, 1) = uu_h(1, i);
+
+        for (unsigned i = 0; i < mat_size - 1; ++i)
+            for (unsigned j = 0; i < lim; ++j)
+                uu_hh(i, j) = uu_h(i + 1, j);
+
+        // Compute rating prediction
+        MatrixXd mm(lim, lim);
+        mm = uu_hh.transpose() * uu_hh;
+
+        double r_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * ...
 
         
     } // end of apply
