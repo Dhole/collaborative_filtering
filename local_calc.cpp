@@ -245,11 +245,11 @@ public:
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_2& sum) {
-        int_map indices;
-        int mat_size = sum.vertices.size() + 1;
+        int_map indices; // Maps each vertex ID to 0..N
+        unsigned int mat_size = sum.vertices.size() + 1; // Number nodes in the local graph
         // W: Adjacency Matrix
         // MatrixXd ww(mat_size, mat_size);
-        MatrixXd ww(mat_size, mat_size);
+        MatrixXd ww(mat_size, mat_size); 
         
         for (unsigned i = 0; i < ww.rows();  ++i)
             for (unsigned j = 0; j < ww.cols();  ++j)
@@ -257,10 +257,10 @@ public:
         //std::cout << "check1" << std::endl;
 
         // Saves all the vertices of the local graph
-        vert_map vertices = sum.vertices;
-        vert_map indexed_vertices;
-        map vertex_neighs = vertex.data().neighs;
-        map neighs_neighs;
+        vert_map vertices = sum.vertices; 
+        vert_map indexed_vertices; // Local graph vertices indexed (can be accessed by 0..N)
+        map vertex_neighs = vertex.data().neighs; // Copy of neighbour map
+        map neighs_neighs; // Temorary store the neighbours' neighbours of a node
         
         
         // Map the vertices into indices
@@ -290,7 +290,7 @@ public:
         
         for (unsigned i = 1; i < mat_size; ++i) {
             for (unsigned j = 0; j < indexed_users.size(); ++j) {
-                if (indexed_vertices[i].ratings.find(indexed_users[j] == indexed_vertices[i].ratings.end()))
+                if (indexed_vertices[i].ratings.find(indexed_users[j]) == indexed_vertices[i].ratings.end())
                     rat(i, j) = 0;
                 else
                     rat(i, j) = indexed_vertices[i].ratings[indexed_users[j]];
@@ -301,14 +301,12 @@ public:
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             ww(indices[it->first] , 0) = vertex_neighs[it->first];
         }
-        //std::cout << "check2" << std::endl;
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             neighs_neighs = vertices[it->first].neighs;
             for (map::iterator it2 = neighs_neighs.begin(); it2 != neighs_neighs.end(); ++it2){
                 ww(indices[it2->first] , indices[it->first]) = neighs_neighs[it2->first];
             }
         }
-        //std::cout << "check3" << std::endl;
         
         // Print the W matrix for testing purposes (Use only with very small datasets)
         /*for (unsigned i = 0; i < ww.rows();  ++i) {
@@ -337,13 +335,10 @@ public:
         // Calculate L: Laplacian Matrix
         MatrixXd ll(mat_size, mat_size);
         ll = dd - ww;
-        /*for (unsigned i = 0; i < dd.rows();  ++i)
-            for (unsigned j = 0; j < dd.cols();  ++j)
-                ll(i, j) = dd(i, j) - ww(i, j);*/
 
         // Calculate L2: Normalized Laplacian Matrix
-        MatrixXd ll2(mat_size, mat_size);
-        MatrixXd dd2(mat_size, mat_size);
+        MatrixXd ll2(mat_size, mat_size); // Normalized Laplacian Matrix
+        MatrixXd dd2(mat_size, mat_size); // D^(-1/2)
         
         for (unsigned i = 0; i < dd.rows();  ++i)
             for (unsigned j = 0; j < dd.cols();  ++j)
@@ -355,50 +350,94 @@ public:
         //
         //
 
+        for (unsigned usr = 0; usr < rat.cols(); ++usr) {
         
-        // Calculate limiting frequency w for each user
-        double w_lim = 0;
-        for (unsigned j = 0; j < ll2.cols();  ++j)
-            w_lim += ll2(0, j) * ll2(0, j);
-        w_lim = sqrt(w_lim) + 0.001;
-        
-        // SVD descomposition
-        SelfAdjointEigenSolver<MatrixXd> es(ll2);
+            VectorXd usr_rat(mat_size, 1); // Vector storing movie ratings for each user (0 means unrated)
+            for (unsigned i = 0; i < mat_size; ++i)
+                usr_rat(i, 0) = rat(i, usr);
+            
+            double rat_real = rat(0, usr); // User rating we want to predict
 
-        unsigned lim;
-        for (lim = 0; lim < es.eigenvalues().rows(); ++lim)
-            if (es.eigenvalues()[lim] > w_lim):
-                break;
+            // Calculate limiting frequency w for each user
+            double w_lim = 0; // limiting frequency (max value for eigenvalue)
+            unsigned ll2_h_size = 1;
+            bool unrated[mat_size]; // Bool array to know if a movie has been rated by the user
+            for (unsigned i = 0; i < usr_rat.rows(); ++i) {
+                if (usr_rat(i, 0) == 0) {
+                    ll2_h_size++;
+                    unrated[i] = true;
+                } else
+                    unrated[i] = false;
+            }
+            
+            // Create the Normalized Laplacian head Matrix with the non-rated movies
+            MatrixXd ll2_h(ll2_h_size, mat_size);
+            for (unsigned i = 0; i < ll2.cols(); ++i)
+                ll2_h(0, i) = ll2(0, i);
 
-        if (lim < 2)
-            lim = 2;
-        
-        // Find U head, U head head and v
-        MatrixXd uu_h(mat_size, lim);
-        for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
-            for (unsigned j = 0; j < lim; ++j)
-                uu_h(i, j) = es.eigenvectors(i, j);
+            ind = 1;
+            for (unsigned i = 0; i < usr_rat.rows(); ++i) {
+                if (unrated[i]) {
+                    for (unsigned j = 0; j < usr_rat.cols(); ++i)
+                        ll2_h(ind, j) = usr_rat(i, j);
+                    ind++;
+                }
+            }
+            
+            SelfAdjointEigenSolver<MatrixXd> es0(ll2_h * ll2_h.transpose());
+            w_lim = sqrt(es0.eigenvalues().minCoeff());
+            
+            /*
+            for (unsigned j = 0; j < ll2.cols();  ++j)
+                w_lim += ll2(0, j) * ll2(0, j);
+            w_lim = sqrt(w_lim) + 0.001;
+            */
+            
+            // SVD descomposition
+            SelfAdjointEigenSolver<MatrixXd> es(ll2);
 
-        VectorXd vv(lim, 1);
-        MatrixXd uu_hh(lim, mat_size - 1);
-        
-        for (unsigned i = 0; i < lim; ++i)
-            vv(i, 0) = uu_h(0, i);
+            unsigned lim;
+            for (lim = 0; lim < es.eigenvalues().rows(); ++lim)
+                if (es.eigenvalues()[lim] > w_lim)
+                    break;
 
-        for (unsigned i = 0; i < mat_size - 1; ++i)
-            for (unsigned j = 0; i < lim; ++j)
-                uu_hh(i, j) = uu_h(i + 1, j);
+            if (lim < 2)
+                lim = 2;
+            
+            // Find U head, U head head and v
+            MatrixXd uu_h(mat_size, lim);
+            for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
+                for (unsigned j = 0; j < lim; ++j)
+                    uu_h(i, j) = es.eigenvectors()[i][j];
 
-        // Compute rating prediction
-        MatrixXd mm(lim, lim);
-        mm = uu_hh.transpose() * uu_hh;
-        
-        // Save the user ratings in a vector
-        VectorXd rr(mat_size - 1, 1);
+            VectorXd vv(lim, 1);
+            MatrixXd uu_hh(lim, mat_size - ll2_h.rows());
+            
+            for (unsigned i = 0; i < lim; ++i)
+                vv(i, 0) = uu_h(0, i);
 
+            VectorXd usr_rat_clean(mat_size - ll2_h.rows() , 1);
+            ind = 0;
+            for (unsigned i = 1; i < mat_size; ++i) {
+                if(!unrated[i]) {
+                    for (unsigned j = 0; i < lim; ++j)
+                        uu_hh(ind, j) = uu_h(i, j);
+                    usr_rat_clean(ind, 0) = usr_rat(i, 0);
+                    ind++;
+                }
+            }
 
-        double r_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * ...
+            // Compute rating prediction
+            MatrixXd mm(lim, lim);
+            mm = uu_hh.transpose() * uu_hh;
+            
+            double rat_mean = usr_rat_clean.sum() / usr_rat_clean.rows();
 
+            double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
+            rat_pred += rat_mean;
+
+            double err = pow(rat_real - rat_pred, 2);
+        }
         
     } // end of apply
 
