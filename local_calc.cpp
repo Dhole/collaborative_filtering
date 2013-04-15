@@ -406,9 +406,10 @@ public:
             
             // Find U head, U head head and v
             MatrixXd uu_h(mat_size, lim);
+            VectorXd eigen_vectors = es.eigenvectors();
             for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
                 for (unsigned j = 0; j < lim; ++j)
-                    uu_h(i, j) = es.eigenvectors()[i][j];
+                    uu_h(i, j) = eigen_vectors(i,j);
 
             VectorXd vv(lim, 1);
             MatrixXd uu_hh(lim, mat_size - ll2_h.rows());
@@ -432,8 +433,9 @@ public:
             mm = uu_hh.transpose() * uu_hh;
             
             double rat_mean = usr_rat_clean.sum() / usr_rat_clean.rows();
-
-            double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
+            VectorXd usr_rat_unmean = usr_rat_clean.array() - rat_mean;
+            //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
+            double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
             rat_pred += rat_mean;
 
             double err = pow(rat_real - rat_pred, 2);
