@@ -346,6 +346,8 @@ public:
 
         ll2 = dd2 * ll * dd2;
     
+        std::cout << "Check 1" << std::endl;
+        
         // For each user ...
         //
         //
@@ -360,7 +362,8 @@ public:
 
             // Calculate limiting frequency w for each user
             double w_lim = 0; // limiting frequency (max value for eigenvalue)
-            unsigned ll2_h_size = 1;
+            unsigned ll2_h_size = 0;
+            usr_rat(0, 0) = 0; // The rating we want to predict acts as an unknoun rating
             bool unrated[mat_size]; // Bool array to know if a movie has been rated by the user
             for (unsigned i = 0; i < usr_rat.rows(); ++i) {
                 if (usr_rat(i, 0) == 0) {
@@ -370,19 +373,26 @@ public:
                     unrated[i] = false;
             }
             
+
+            std::cout << "Check 2" << std::endl;
+
             // Create the Normalized Laplacian head Matrix with the non-rated movies
             MatrixXd ll2_h(ll2_h_size, mat_size);
-            for (unsigned i = 0; i < ll2.cols(); ++i)
-                ll2_h(0, i) = ll2(0, i);
+            //for (unsigned i = 0; i < ll2.cols(); ++i)
+            //    ll2_h(0, i) = ll2(0, i);
 
-            ind = 1;
-            for (unsigned i = 0; i < usr_rat.rows(); ++i) {
+            std::cout << "Check 2.1" << std::endl;
+
+            ind = 0;
+            for (unsigned i = 0; i < ll2.rows(); ++i) {
                 if (unrated[i]) {
-                    for (unsigned j = 0; j < usr_rat.cols(); ++i)
-                        ll2_h(ind, j) = usr_rat(i, j);
+                    for (unsigned j = 0; j < ll2.cols(); ++j)
+                        ll2_h(ind, j) = ll2(i, j);
                     ind++;
                 }
             }
+
+            std::cout << "Check 2.2" << std::endl;
             
             SelfAdjointEigenSolver<MatrixXd> es0(ll2_h * ll2_h.transpose());
             w_lim = sqrt(es0.eigenvalues().minCoeff());
@@ -397,36 +407,43 @@ public:
             SelfAdjointEigenSolver<MatrixXd> es(ll2);
 
             unsigned lim;
+            VectorXd eigen_values = es.eigenvalues();
             for (lim = 0; lim < es.eigenvalues().rows(); ++lim)
-                if (es.eigenvalues()[lim] > w_lim)
+                if (eigen_values(lim, 0) > w_lim)
                     break;
 
             if (lim < 2)
                 lim = 2;
             
+            std::cout << "Check 2.25" << std::endl;
+
             // Find U head, U head head and v
             MatrixXd uu_h(mat_size, lim);
-            VectorXd eigen_vectors = es.eigenvectors();
+            MatrixXd eigen_vectors = es.eigenvectors();
             for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
                 for (unsigned j = 0; j < lim; ++j)
-                    uu_h(i, j) = eigen_vectors(i,j);
+                    uu_h(i, j) = eigen_vectors(i, j);
 
             VectorXd vv(lim, 1);
-            MatrixXd uu_hh(lim, mat_size - ll2_h.rows());
+            MatrixXd uu_hh(mat_size - ll2_h.rows() , lim);
             
             for (unsigned i = 0; i < lim; ++i)
                 vv(i, 0) = uu_h(0, i);
+            
+            std::cout << "Check 2.5" << std::endl;
 
-            VectorXd usr_rat_clean(mat_size - ll2_h.rows() , 1);
+            VectorXd usr_rat_clean(mat_size - ll2_h.rows(), 1);
             ind = 0;
-            for (unsigned i = 1; i < mat_size; ++i) {
+            for (unsigned i = 0; i < mat_size; ++i) {
                 if(!unrated[i]) {
-                    for (unsigned j = 0; i < lim; ++j)
+                    for (unsigned j = 0; j < lim; ++j)
                         uu_hh(ind, j) = uu_h(i, j);
                     usr_rat_clean(ind, 0) = usr_rat(i, 0);
                     ind++;
                 }
             }
+
+            std::cout << "Check 3" << std::endl;
 
             // Compute rating prediction
             MatrixXd mm(lim, lim);
