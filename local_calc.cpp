@@ -316,6 +316,7 @@ public:
             std::cout << std::endl;
         }
         std::cout << std::endl;*/
+        
 
         // Calculate D: Diagonal Degree Matrix
         MatrixXd dd(mat_size, mat_size);
@@ -338,15 +339,20 @@ public:
 
         // Calculate L2: Normalized Laplacian Matrix
         MatrixXd ll2(mat_size, mat_size); // Normalized Laplacian Matrix
-        MatrixXd dd2(mat_size, mat_size); // D^(-1/2)
+        MatrixXd dd2 = dd.inverse(); // Store D^(-1/2)
         
         for (unsigned i = 0; i < dd.rows();  ++i)
             for (unsigned j = 0; j < dd.cols();  ++j)
-                dd2(i, j) = 1 / sqrt(dd(i, j));
+                dd2(i, j) = sqrt(dd2(i, j));
 
         ll2 = dd2 * ll * dd2;
-    
-        std::cout << "Check 1" << std::endl;
+        
+        if (vertex.id() == 2) {
+            std::cout << ww << std::endl;
+            std::cout << ll2 << std::endl;
+        }
+
+        //std::cout << "Check 1" << std::endl;
         
         // For each user ...
         //
@@ -374,14 +380,14 @@ public:
             }
             
 
-            std::cout << "Check 2" << std::endl;
+            //std::cout << "Check 2" << std::endl;
 
             // Create the Normalized Laplacian head Matrix with the non-rated movies
             MatrixXd ll2_h(ll2_h_size, mat_size);
             //for (unsigned i = 0; i < ll2.cols(); ++i)
             //    ll2_h(0, i) = ll2(0, i);
 
-            std::cout << "Check 2.1" << std::endl;
+            //std::cout << "Check 2.1" << std::endl;
 
             ind = 0;
             for (unsigned i = 0; i < ll2.rows(); ++i) {
@@ -392,7 +398,7 @@ public:
                 }
             }
 
-            std::cout << "Check 2.2" << std::endl;
+            //std::cout << "Check 2.2" << std::endl;
             
             SelfAdjointEigenSolver<MatrixXd> es0(ll2_h * ll2_h.transpose());
             w_lim = sqrt(es0.eigenvalues().minCoeff());
@@ -415,7 +421,7 @@ public:
             if (lim < 2)
                 lim = 2;
             
-            std::cout << "Check 2.25" << std::endl;
+            //std::cout << "Check 2.25" << std::endl;
 
             // Find U head, U head head and v
             MatrixXd uu_h(mat_size, lim);
@@ -430,7 +436,7 @@ public:
             for (unsigned i = 0; i < lim; ++i)
                 vv(i, 0) = uu_h(0, i);
             
-            std::cout << "Check 2.5" << std::endl;
+            //std::cout << "Check 2.5" << std::endl;
 
             VectorXd usr_rat_clean(mat_size - ll2_h.rows(), 1);
             ind = 0;
@@ -443,7 +449,7 @@ public:
                 }
             }
 
-            std::cout << "Check 3" << std::endl;
+            //std::cout << "Check 3" << std::endl;
 
             // Compute rating prediction
             MatrixXd mm(lim, lim);
@@ -456,6 +462,15 @@ public:
             rat_pred += rat_mean;
 
             double err = pow(rat_real - rat_pred, 2);
+            if (vertex.id() == 2 && rat_real == 5) {
+                std::cout << "ratings: " << std::endl << usr_rat << std::endl;
+                std::cout << "Real rat: " << rat_real << std::endl;
+                std::cout << "w_lim: " << w_lim << std::endl;
+                std::cout << "vv: " << std::endl << vv << std::endl;
+                std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
+                std::cout << "uu_h" << std::endl << uu_h << std::endl;
+                std::cout << "Pred rat: " << rat_pred << std::endl;
+            }
         }
         
     } // end of apply
