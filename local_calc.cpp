@@ -16,6 +16,7 @@
 #include <math.h>
 //#include <boost/numeric/ublas/matrix.hpp>
 #include <iostream>
+#include <vector>
 #include <Eigen/Dense>
 
 using namespace graphlab;
@@ -27,6 +28,12 @@ typedef boost::unordered_map<vertex_id_type, unsigned int> int_map;
 //typedef Matrix<double, Dynamic, Dynamic> MatrixXd;
 //typedef Matrix<double, Dynamic, 1>       VectorXd;
 
+typedef struct {
+    unsigned int user_id;
+    float mse;
+    unsigned int kk;
+} result;
+
 /**
  * \brief The vertex data stores the movie rating information.
  */
@@ -37,6 +44,9 @@ struct vertex_data {
     
     /** \brief The information of the neighbours to the vertex */
     map neighs;
+
+    /** \brief Store the results: userID, MSE, K neighbours used for prediction */
+    std::vector<result> res;
 
     vertex_data() { }
     vertex_data(map ratings): ratings(ratings) { }
@@ -347,16 +357,19 @@ public:
 
         ll2 = dd2 * ll * dd2;
         
-        if (vertex.id() == 2) {
+        /*if (vertex.id() == 2) {
             std::cout << ww << std::endl;
             std::cout << ll2 << std::endl;
-        }
+        }*/
 
         //std::cout << "Check 1" << std::endl;
         
         // For each user ...
         //
         //
+
+        std::vector<result> res(rat.cols()); // Store all the results
+        result res_usr; // Store user result
 
         for (unsigned usr = 0; usr < rat.cols(); ++usr) {
         
@@ -379,7 +392,6 @@ public:
                     unrated[i] = false;
             }
             
-
             //std::cout << "Check 2" << std::endl;
 
             // Create the Normalized Laplacian head Matrix with the non-rated movies
@@ -462,7 +474,11 @@ public:
             rat_pred += rat_mean;
 
             double err = pow(rat_real - rat_pred, 2);
-            if (vertex.id() == 2 && rat_real == 5) {
+ 
+            /*if (vertex.id() == 2 && rat_real == 5) { */
+            if (err > 16) {
+                std::cout << "ww: " << std::endl << ww << std::endl;
+                std::cout << "ll2: " << std::endl << ll2 << std::endl;
                 std::cout << "EigenVectors: " << std::endl << eigen_vectors << std::endl;
                 std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
                 std::cout << "ratings: " << std::endl << usr_rat << std::endl;
@@ -472,8 +488,14 @@ public:
                 std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
                 std::cout << "uu_h" << std::endl << uu_h << std::endl;
                 std::cout << "Pred rat: " << rat_pred << std::endl;
+                std::cout << std::endl << std::endl;
             }
+            res_usr.user_id = indexed_users[usr];
+            res_usr.mse = err;
+            res_usr.kk = usr_rat_clean.rows();
+            res[usr] = res_usr;
         }
+        vertex.data().res = res;
         
     } // end of apply
 
@@ -494,6 +516,22 @@ public:
     } // end of signal_left
 
 }; // end of als vertex program
+
+/**
+ * \brief Saves the results
+ */
+struct graph_writer {
+    std::string save_vertex(graph_type::vertex_type vt) {
+        std::stringstream strm;
+        for (std::vector<result>::iterator it = vt.data().res.begin(); it != vt.data().res.end(); ++it) {
+            strm << vt.id() << " " << it->user_id << " " 
+                                   << it->mse << " "
+                                   << it->kk << "\n";
+        }
+        return strm.str();
+    }
+    std::string save_edge(graph_type::edge_type e) { return ""; }
+}; // end of pagerank writer
 
 int main(int argc, char** argv) {
     graphlab::mpi_tools::init(argc, argv);
@@ -579,6 +617,12 @@ int main(int argc, char** argv) {
                                         error_vertex_data,
                                         print_finalize);
     engine.aggregate_now("error"); */
+
+    // Save the results into a file -------------------------------------------------
+    graph.save("out_res", graph_writer(),
+                false,    // do not gzip
+                true,     // save vertices
+                false);   // do not save edges
     
     graphlab::mpi_tools::finalize();
     return EXIT_SUCCESS;
