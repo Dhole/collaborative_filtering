@@ -463,6 +463,8 @@ public:
 
             double err = pow(rat_real - rat_pred, 2);
             if (vertex.id() == 2 && rat_real == 5) {
+                std::cout << "EigenVectors: " << std::endl << eigen_vectors << std::endl;
+                std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
                 std::cout << "ratings: " << std::endl << usr_rat << std::endl;
                 std::cout << "Real rat: " << rat_real << std::endl;
                 std::cout << "w_lim: " << w_lim << std::endl;
