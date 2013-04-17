@@ -309,13 +309,13 @@ public:
 
         // Calculate adjacency matrix
         for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
-            ww(indices[it->first] , 0) = vertex_neighs[it->first];
-        }
-        for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
             neighs_neighs = vertices[it->first].neighs;
             for (map::iterator it2 = neighs_neighs.begin(); it2 != neighs_neighs.end(); ++it2){
-                ww(indices[it2->first] , indices[it->first]) = neighs_neighs[it2->first];
+                ww(indices[it->first] , indices[it2->first]) = neighs_neighs[it2->first];
             }
+            ww(0, indices[it->first]) = vertex_neighs[it->first];
+            // For some reason, the first colum is wrongly writen when iterating neighs_neighs, this should fix it
+            ww(indices[it->first], 0) = vertex_neighs[it->first];
         }
         
         // Print the W matrix for testing purposes (Use only with very small datasets)
@@ -476,7 +476,9 @@ public:
             double err = pow(rat_real - rat_pred, 2);
  
             /*if (vertex.id() == 2 && rat_real == 5) { */
-            if (err > 16) {
+            //if (err > 16) {
+            if (false) {
+                std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << indexed_users[usr] << " ====" << std::endl;
                 std::cout << "ww: " << std::endl << ww << std::endl;
                 std::cout << "ll2: " << std::endl << ll2 << std::endl;
                 std::cout << "EigenVectors: " << std::endl << eigen_vectors << std::endl;
