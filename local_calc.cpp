@@ -18,6 +18,8 @@
 #include <iostream>
 #include <vector>
 #include <Eigen/Dense>
+#include <stdlib.h>     /* srand, rand */
+#include <time.h>       /* time */
 
 using namespace graphlab;
 //using namespace boost::numeric::ublas;
@@ -33,6 +35,10 @@ typedef struct {
     float mse;
     unsigned int kk;
 } result;
+
+// Global variables
+bool verbose = false;
+unsigned int comp_pct = 100; // Percentage of nodes where the computation will happen
 
 /**
  * \brief The vertex data stores the movie rating information.
@@ -255,8 +261,16 @@ public:
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_2& sum) {
+
+        // Do the computation on a limited percentage of nodes
+        if ((rand() % 100) < comp_pct) {
+
         int_map indices; // Maps each vertex ID to 0..N
         unsigned int mat_size = sum.vertices.size() + 1; // Number nodes in the local graph
+    
+        if (mat_size < 3)
+            return;
+
         // W: Adjacency Matrix
         // MatrixXd ww(mat_size, mat_size);
         MatrixXd ww(mat_size, mat_size); 
@@ -477,7 +491,7 @@ public:
  
             /*if (vertex.id() == 2 && rat_real == 5) { */
             //if (err > 16) {
-            if (false) {
+            if (verbose) {
                 std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << indexed_users[usr] << " ====" << std::endl;
                 std::cout << "ww: " << std::endl << ww << std::endl;
                 std::cout << "ll2: " << std::endl << ll2 << std::endl;
@@ -498,7 +512,8 @@ public:
             res[usr] = res_usr;
         }
         vertex.data().res = res;
-        
+    
+    } // end of if random ...
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -538,7 +553,25 @@ struct graph_writer {
 int main(int argc, char** argv) {
     graphlab::mpi_tools::init(argc, argv);
     graphlab::distributed_control dc;
+
+    /* initialize random seed: */
+    srand (time(NULL));
     
+    
+    // Parse command line options
+    graphlab::command_line_options clopts("Local graph computation.");
+    clopts.attach_option("pct", comp_pct, "Percentage of nodes used for computation. Required ");
+    clopts.add_positional("pct");
+    int verbosity = 0;
+    clopts.attach_option("verbosity", verbosity, "Enable verbosity.");
+    clopts.add_positional("verbosity");
+    if (!clopts.parse(argc, argv)) {
+        dc.cout() << "Error in parsing command line arguments." << std::endl;
+        return EXIT_FAILURE;
+    }
+    if (verbosity == 1)
+        verbose = true;
+
     dc.cout() << "Loading graph." << std::endl;
     graphlab::timer timer; 
     graph_type graph(dc);
