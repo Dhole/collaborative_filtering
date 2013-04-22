@@ -436,6 +436,7 @@ public:
             */
             
             // SVD descomposition
+            // !! This Matrix is big, this operation takes time
             SelfAdjointEigenSolver<MatrixXd> es(ll2);
 
             unsigned lim;
