@@ -14,6 +14,9 @@
 #include <graphlab.hpp>
 #include <boost/unordered_map.hpp>
 #include <list>
+#include <limits>
+
+unsigned int uimax = std::numeric_limits<int>::max();
 
 using namespace graphlab;
 
@@ -95,7 +98,9 @@ bool graph_loader(graph_type& graph,
     strm >> source_id >> target_id >> obs;
     
     // map target id into a separate number space
-    source_id = -(graphlab::vertex_id_type(source_id + SAFE_NEG_OFFSET));
+    //source_id = -(graphlab::vertex_id_type(source_id + SAFE_NEG_OFFSET));
+    //!! This could be dangerous, will uimax be the same in different platforms???
+    source_id = uimax - source_id;
 
     // Create an edge and add it to the graph
     graph.add_vertex(source_id);
