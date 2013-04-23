@@ -102,8 +102,8 @@ bool graph_vertex_loader(graph_type& graph,
 } // end of graph_loader
 
 bool graph_edge_loader(graph_type& graph, 
-                         const std::string& filename,
-                         const std::string& line) {
+                       const std::string& filename,
+                       const std::string& line) {
     
     // Parse the line
     std::stringstream strm(line);
