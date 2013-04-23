@@ -154,8 +154,11 @@ struct graph_writer {
     }
     std::string save_edge(graph_type::edge_type ed) { 
         std::stringstream strm;
-        strm << ed.source().id() << " " << ed.target().id() << " "
-             << ed.data().obs << "\n";
+        if (ed.data().obs > 0.01) {
+            strm << ed.source().id() << " " << ed.target().id() << " "
+                 << ed.data().obs << "\n";
+        } else 
+            strm << "";
         return strm.str();
     }
 }; // end of pagerank writer
