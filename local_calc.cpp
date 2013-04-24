@@ -275,9 +275,10 @@ public:
         // MatrixXd ww(mat_size, mat_size);
         MatrixXd ww(mat_size, mat_size); 
         
-        for (unsigned i = 0; i < ww.rows();  ++i)
+        ww.setZero();
+        /*for (unsigned i = 0; i < ww.rows();  ++i)
             for (unsigned j = 0; j < ww.cols();  ++j)
-                ww(i, j) = 0;
+                ww(i, j) = 0;*/
         //std::cout << "check1" << std::endl;
 
         // Saves all the vertices of the local graph
@@ -344,9 +345,10 @@ public:
 
         // Calculate D: Diagonal Degree Matrix
         MatrixXd dd(mat_size, mat_size);
-        for (unsigned i = 0; i < dd.rows();  ++i)
+        dd.setZero();
+        /*for (unsigned i = 0; i < dd.rows();  ++i)
             for (unsigned j = 0; j < dd.cols();  ++j)
-                dd(i, j) = 0;
+                dd(i, j) = 0;*/
           
         double count;
         for (unsigned i = 0; i < ww.rows();  ++i) {

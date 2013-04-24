@@ -119,11 +119,12 @@ int main () {
                 continue; //skip empty lines
             std::stringstream parseline(line);
             parseline >> movie_id1 >> movie_id2 >> weight;
-
-            if (std::max(movie_id1, movie_id2) > weights.rows())
-                weights.conservativeResize(weights.rows() * 2, weights.cols() * 2);
-            if (std::max(movie_id1, movie_id2) > fin_size)
-                fin_size = std::max(movie_id1, movie_id2);
+            
+            unsigned int max_val = std::max(movie_id1, movie_id2);
+            if (max_val >= weights.rows())
+                weights.conservativeResize(max_val * 2, max_val * 2);
+            if (max_val > fin_size)
+                fin_size = max_val;
 
             weights(movie_id1, movie_id2) = weight;
         }
