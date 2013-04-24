@@ -133,5 +133,55 @@ int main () {
     weights.conservativeResize(fin_size, fin_size);
     std::cout << "Number of movies: " << fin_size << std::endl;
 
+    // Compute Laplacian matrix for each user sub-graph
+    unsigned int user_id, movie_id;
+    MatrixXd ww;
+    map_rat ratings;
+    for (map_usr::iterator it = users.begin(); it != users.end(); ++it){
+        user_id = it->first;
+        ratings = it->second;
+        ww.resize(ratings.size(), ratings.size());
+        std::vector<double> movie_list(ratings.size());
+        
+        // Retrieve list of movies rated by the user
+        for (map_rat::iterator it2 = ratings.begin(); it2 != ratings.end(); ++it2){
+            movie_id = it->first;
+            movie_list.push_back(movie_id);
+        }
+
+        // Save adjacency matrix W
+        for (unsigned i = 0; i < movie_list.size(), ++i)
+            for (unsigned j = 0; j < movie_list.size(), ++j)
+                 ww(i, j) = weights(movie_list[i], movie_list[j]);
+        
+        // Calculate D: Diagonal Degree Matrix
+        MatrixXd dd(mat_size, mat_size);
+        dd.setZero();
+          
+        double count;
+        for (unsigned i = 0; i < ww.rows();  ++i) {
+            count = 0;
+            for (unsigned j = 0; j < ww.cols();  ++j)
+                count += ww(i, j);
+            dd(i, i) = count;
+        }
+    
+        // Calculate L: Laplacian Matrix
+        MatrixXd ll(mat_size, mat_size);
+        ll = dd - ww;
+
+        // Calculate L2: Normalized Laplacian Matrix
+        MatrixXd ll2(mat_size, mat_size); // Normalized Laplacian Matrix
+        MatrixXd dd2 = dd.inverse(); // Store D^(-1/2)
+        
+        for (unsigned i = 0; i < dd.rows();  ++i)
+            for (unsigned j = 0; j < dd.cols();  ++j)
+                dd2(i, j) = sqrt(dd2(i, j));
+
+        ll2 = dd2 * ll * dd2;
+
+
+    }
+
     return 0;
 }

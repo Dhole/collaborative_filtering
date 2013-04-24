@@ -373,6 +373,10 @@ public:
 
         ll2 = dd2 * ll * dd2;
         
+        // SVD descomposition
+        // !! This Matrix is big, this operation takes time
+        SelfAdjointEigenSolver<MatrixXd> es(ll2);
+        
         /*if (vertex.id() == 2) {
             std::cout << ww << std::endl;
             std::cout << ll2 << std::endl;
@@ -436,10 +440,6 @@ public:
                 w_lim += ll2(0, j) * ll2(0, j);
             w_lim = sqrt(w_lim) + 0.001;
             */
-            
-            // SVD descomposition
-            // !! This Matrix is big, this operation takes time
-            SelfAdjointEigenSolver<MatrixXd> es(ll2);
 
             unsigned lim;
             VectorXd eigen_values = es.eigenvalues();
