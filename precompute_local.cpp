@@ -98,7 +98,7 @@ int main () {
     // Load the movie graph data (weights between movies)
     std::string prefix = "out_fin_";
 
-    unsigned int init_size = 1000;
+    unsigned int init_size = 2000; // This should be >= to the number of movies
     unsigned int fin_size = 0;
     MatrixXd weights(init_size, init_size);
     weights.setZero();
@@ -121,8 +121,9 @@ int main () {
             parseline >> movie_id1 >> movie_id2 >> weight;
             
             unsigned int max_val = std::max(movie_id1, movie_id2);
-            if (max_val >= weights.rows())
-                weights.conservativeResize(max_val * 2, max_val * 2);
+            // !! This is unsafe because the new values of the matrix will be uninitialized
+            //if (max_val >= weights.rows())
+            //    weights.conservativeResize(max_val * 2, max_val * 2);
             if (max_val > fin_size)
                 fin_size = max_val;
 
@@ -149,10 +150,17 @@ int main () {
             movie_list.push_back(movie_id);
         }
 
+        unsigned int mat_size = movie_list.size();
+
         // Save adjacency matrix W
-        for (unsigned i = 0; i < movie_list.size(), ++i)
-            for (unsigned j = 0; j < movie_list.size(), ++j)
-                 ww(i, j) = weights(movie_list[i], movie_list[j]);
+        for (unsigned i = 0; i < movie_list.size(); ++i) {
+            for (unsigned j = 0; j < movie_list.size(); ++j) {
+                if (std::max(movie_list[i], movie_list[j]) > weights.rows())
+                    ww(i, j) = 0;
+                else
+                    ww(i, j) = weights(movie_list[i], movie_list[j]);
+            }
+        }
         
         // Calculate D: Diagonal Degree Matrix
         MatrixXd dd(mat_size, mat_size);
@@ -179,7 +187,39 @@ int main () {
                 dd2(i, j) = sqrt(dd2(i, j));
 
         ll2 = dd2 * ll * dd2;
+        
+        // SVD descomposition
+        // !! This Matrix is big, this operation takes time
+        SelfAdjointEigenSolver<MatrixXd> es(ll2);
+        MatrixXd eigen_vectors = es.eigenvectors();
+        VectorXd eigen_values = es.eigenvalues();
 
+        // Find the maximum sig_min
+        float sig_min_max = 0;
+        for (unsigned i = 0; i < ll2.rows(); ++i) {
+
+            float sig_min = 0;
+            for (unsigned j = 0; j < ll2.cols(); ++j) {
+                sig_min += pow(ll2(i, j), 2);
+            }
+            sig_min = std::sqrt(sig_min);
+
+            if (sig_min_max < sig_min)
+                sig_min_max = sig_min;
+        }
+        sig_min_max += 0.01;
+
+        // Find how many eigenvectors-eivenvalues to store
+        unsigned int lim;
+        for (lim = 0; lim < eigen_values.rows(); ++lim)
+            if (eigen_values(lim, 0) > sig_min_max)
+                    break;
+
+        if (lim < 2)
+            lim = 2;
+
+        eigen_values.conservativeResize(lim);
+        eigen_vectors.conservativeResize(eigen_vectors.rows(), lim);
 
     }
 
