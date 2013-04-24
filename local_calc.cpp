@@ -263,7 +263,7 @@ public:
                const gather_type_2& sum) {
 
         // Do the computation on a limited percentage of nodes
-        if ((rand() % 100) < comp_pct) {
+        if ((unsigned int)(rand() % 100) < comp_pct) {
 
         int_map indices; // Maps each vertex ID to 0..N
         unsigned int mat_size = sum.vertices.size() + 1; // Number nodes in the local graph
@@ -489,6 +489,12 @@ public:
             //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
             double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
             rat_pred += rat_mean;
+
+            // Set boundaries to the rating result (should be between 1 and 5)
+            if (rat_pred > 5)
+                rat_pred = 5;
+            if (rat_pred < 1)
+                rat_pred = 1;
 
             double err = pow(rat_real - rat_pred, 2);
  
