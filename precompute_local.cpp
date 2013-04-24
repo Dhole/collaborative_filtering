@@ -8,6 +8,7 @@
 #include <limits>
 #include <boost/unordered_map.hpp>
 #include <Eigen/Dense>
+#include <algorithm>    // std::max
 
 using namespace Eigen;
 
@@ -81,12 +82,12 @@ int main () {
         std::cout << "Reading file: " << filename << std::endl;
         std::ifstream infile(filename.c_str());
         std::string line;
-    
+        unsigned int user_id, movie_id, rating;
+
         while (std::getline(infile, line)) {
             if(!line.length()) 
                 continue; //skip empty lines
             std::stringstream parseline(line);
-            unsigned int user_id, movie_id, rating;
             parseline >> user_id >> movie_id >> rating;
             user_id =  uimax - user_id;
             users[user_id][movie_id] = rating;
@@ -96,14 +97,40 @@ int main () {
     }
     // Load the movie graph data (weights between movies)
     std::string prefix = "out_fin_";
-    MatrixXd weights(bla, bla);
-    for ...
+
+    unsigned int init_size = 1000;
+    unsigned int fin_size = 0;
+    MatrixXd weights(init_size, init_size);
+    weights.setZero();
+    files.clear();
+
+    list_files_with_prefix("./", prefix, files);
+
+    for(std::vector<std::string>::iterator it = files.begin(); it != files.end(); ++it) {
+        std::string filename = *it;
+        std::cout << "Reading file: " << filename << std::endl;
+        std::ifstream infile(filename.c_str());
+        std::string line;
         unsigned int movie_id1, movie_id2;
         double weight;
-        parseline >> movie_id1 >> movie_id2 >> weight;
-        weights(movie_id1, movie_id2) = weight
-    ...
 
+        while (std::getline(infile, line)) {
+            if(!line.length()) 
+                continue; //skip empty lines
+            std::stringstream parseline(line);
+            parseline >> movie_id1 >> movie_id2 >> weight;
+
+            if (std::max(movie_id1, movie_id2) > weights.rows())
+                weights.conservativeResize(weights.rows() * 2, weights.cols() * 2);
+            if (std::max(movie_id1, movie_id2) > fin_size)
+                fin_size = std::max(movie_id1, movie_id2);
+
+            weights(movie_id1, movie_id2) = weight;
+        }
+        infile.close();        
+    }
+    weights.conservativeResize(fin_size, fin_size);
+    std::cout << "Number of movies: " << fin_size << std::endl;
 
     return 0;
 }
