@@ -9,6 +9,7 @@
 #include <boost/unordered_map.hpp>
 #include <Eigen/Dense>
 #include <algorithm>    // std::max
+#include <boost/thread.hpp>
 
 using namespace Eigen;
 
@@ -16,6 +17,20 @@ typedef boost::unordered_map<unsigned int, unsigned int> map_rat;
 typedef boost::unordered_map<unsigned int, map_rat> map_usr;
 
 unsigned int uimax = std::numeric_limits<int>::max();
+
+std::string matrix_to_matlab(const MatrixXd mm) {
+    std::stringstream strm;
+    strm << "[ ";
+    for (unsigned i = 0; i < mm.rows(); ++i) {
+        for (unsigned j = 0; j < mm.cols(); ++j) {
+            strm << mm(i, j) << " ";
+        }
+        if (i < mm.rows() - 1)
+            strm << ";";
+    }
+    strm << "]; ";
+    return strm.str();
+}
 
 void list_files_with_suffix(const std::string& pathname,
                             const std::string& suffix,
@@ -131,26 +146,39 @@ int main () {
         }
         infile.close();        
     }
-    weights.conservativeResize(fin_size, fin_size);
+    
+    std::ofstream offile("out_eigen_", std::ofstream::out);
+    offile.close();
+    
+    // The column and row 0 will not be used: movie_ID starts from 1 to fin_size
+    weights.conservativeResize(fin_size + 1, fin_size + 1);
+    //std::cout << weights << std::endl;
+
     std::cout << "Number of movies: " << fin_size << std::endl;
+    std::cout << "Number of users: " << users.size() << std::endl;
 
     // Compute Laplacian matrix for each user sub-graph
     unsigned int user_id, movie_id;
-    MatrixXd ww;
+    MatrixXd ww(10, 10);
     map_rat ratings;
+    unsigned int n_users_done = 0;
     for (map_usr::iterator it = users.begin(); it != users.end(); ++it){
         user_id = it->first;
         ratings = it->second;
         ww.resize(ratings.size(), ratings.size());
-        std::vector<double> movie_list(ratings.size());
+        std::vector<unsigned> movie_list;
         
         // Retrieve list of movies rated by the user
         for (map_rat::iterator it2 = ratings.begin(); it2 != ratings.end(); ++it2){
-            movie_id = it->first;
+            movie_id = it2->first;
+            //std::cout << movie_id << " ";
             movie_list.push_back(movie_id);
         }
 
+        n_users_done++;
         unsigned int mat_size = movie_list.size();
+        std::cout << (float)n_users_done / users.size() * 100 << "% - Matrix size: " 
+                  << movie_list.size() << std::endl;
 
         // Save adjacency matrix W
         for (unsigned i = 0; i < movie_list.size(); ++i) {
@@ -161,6 +189,7 @@ int main () {
                     ww(i, j) = weights(movie_list[i], movie_list[j]);
             }
         }
+        //std::cout << ww << std::endl;
         
         // Calculate D: Diagonal Degree Matrix
         MatrixXd dd(mat_size, mat_size);
@@ -171,7 +200,10 @@ int main () {
             count = 0;
             for (unsigned j = 0; j < ww.cols();  ++j)
                 count += ww(i, j);
-            dd(i, i) = count;
+            if (count == 0)
+                dd(i, i) = 1;
+            else
+                dd(i, i) = count;
         }
     
         // Calculate L: Laplacian Matrix
@@ -187,7 +219,12 @@ int main () {
                 dd2(i, j) = sqrt(dd2(i, j));
 
         ll2 = dd2 * ll * dd2;
-        
+        //if (user_id == 2147483333) {
+            //std::cout << matrix_to_matlab(ww);
+            //std::cout << ll << std::endl << std::endl;
+            //std::cout << ll2 << std::endl << std::endl;
+        //}
+
         // SVD descomposition
         // !! This Matrix is big, this operation takes time
         SelfAdjointEigenSolver<MatrixXd> es(ll2);
@@ -220,7 +257,23 @@ int main () {
 
         eigen_values.conservativeResize(lim);
         eigen_vectors.conservativeResize(eigen_vectors.rows(), lim);
-
+        
+        std::ofstream offile("out_eigen_", std::ofstream::out | std::ofstream::app);
+        std::stringstream strm;
+        strm << user_id << " ";
+        for (unsigned i = 0; i < movie_list.size(); ++i)
+            strm << movie_list[i] << " ";
+        strm << std::endl;
+        for (unsigned i = 0; i < eigen_values.rows(); ++i)
+            strm << eigen_values(i, 0) << " ";
+        strm << std::endl;
+        for (unsigned i = 0; i < eigen_vectors.rows(); ++i)
+            for (unsigned j = 0; j < eigen_values.cols(); ++j)
+                strm << eigen_vectors(i, j) << " ";
+        strm << std::endl;
+        offile << strm.str();
+        offile.close();
+        //std::cout << strm.str();
     }
 
     return 0;
