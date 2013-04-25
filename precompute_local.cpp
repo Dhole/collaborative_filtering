@@ -167,6 +167,7 @@ int main () {
         ratings = it->second;
         ww.resize(ratings.size(), ratings.size());
         std::vector<unsigned> movie_list;
+        std::vector<double> sigs_min;
         
         // Retrieve list of movies rated by the user
         for (map_rat::iterator it2 = ratings.begin(); it2 != ratings.end(); ++it2){
@@ -240,6 +241,7 @@ int main () {
                 sig_min += pow(ll2(i, j), 2);
             }
             sig_min = std::sqrt(sig_min);
+            sigs_min.push_back(sig_min + 0.01);
 
             if (sig_min_max < sig_min)
                 sig_min_max = sig_min;
@@ -260,9 +262,9 @@ int main () {
         
         std::ofstream offile("out_eigen_", std::ofstream::out | std::ofstream::app);
         std::stringstream strm;
-        strm << user_id << " ";
+        strm << user_id << " " << movie_list.size() << " " << eigen_values.rows() << " ";
         for (unsigned i = 0; i < movie_list.size(); ++i)
-            strm << movie_list[i] << " ";
+            strm << movie_list[i] << " " << sigs_min[i];
         strm << std::endl;
         for (unsigned i = 0; i < eigen_values.rows(); ++i)
             strm << eigen_values(i, 0) << " ";
