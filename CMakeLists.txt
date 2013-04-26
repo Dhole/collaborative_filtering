@@ -45,5 +45,5 @@ requires_eigen(knn3) # build and attach eigen
 add_graphlab_executable(local_calc local_calc.cpp)
 requires_eigen(local_calc) # build and attach eigen
 
-
-
+add_graphlab_executable(local_calc_precomp local_calc_precomp.cpp)
+requires_eigen(local_calc) # build and attach eigen
