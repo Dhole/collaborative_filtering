@@ -39,7 +39,8 @@ typedef struct {
 } result;
 
 typedef struct {
-    std::vector<unsigned int> movie_list;
+    //std::vector<unsigned int> movie_list;
+    int_map movie_list;
     std::vector<double> sigs_min;
     VectorXd eigen_values;
     MatrixXd eigen_vectors;
@@ -577,7 +578,8 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
     std::string line;
     unsigned int user_id, movie_id, kk, mm;
     double val, sig_min;
-    std::vector<unsigned int> movie_list;
+    //std::vector<unsigned int> movie_list;
+    int_map movie_list;
     std::vector<double> sigs_min;
     VectorXd eigen_values;
     MatrixXd eigen_vectors;
@@ -592,11 +594,14 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
         switch (state) {
             case 0: // UserID + MovieID list
                 parseline >> user_id >> kk >> mm;
+                //std::cout << user_id << " " << kk << " " << mm << std::endl;
                 eigen_values.resize(mm);
                 eigen_vectors.resize(kk, mm);
-                for (unsigned i = 0; i << kk; ++i) {
+                movie_list.clear();
+                for (unsigned i = 0; i < kk; ++i) {
                     parseline >> movie_id >> sig_min;
-                    movie_list.push_back(movie_id);
+                    //movie_list.push_back(movie_id);
+                    movie_list[movie_id] = i;
                     sigs_min.push_back(sig_min);
                 }
                 user.movie_list = movie_list;
@@ -621,6 +626,7 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
                 user.eigen_vectors = eigen_vectors;
                 usr_data[user_id] = user;
                 state = 0;
+                //std::cout << user.movie_list.size() << " " << std::endl;
                 break;
         }
 
