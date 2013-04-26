@@ -264,7 +264,7 @@ int main () {
         std::stringstream strm;
         strm << user_id << " " << movie_list.size() << " " << eigen_values.rows() << " ";
         for (unsigned i = 0; i < movie_list.size(); ++i)
-            strm << movie_list[i] << " " << sigs_min[i];
+            strm << movie_list[i] << " " << sigs_min[i] << " ";
         strm << std::endl;
         for (unsigned i = 0; i < eigen_values.rows(); ++i)
             strm << eigen_values(i, 0) << " ";
