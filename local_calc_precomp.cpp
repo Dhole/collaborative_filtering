@@ -60,9 +60,6 @@ struct vertex_data {
     
     /** \brief The ratings each user has given to the movie */
     map ratings;
-    
-    /** \brief The information of the neighbours to the vertex */
-    map neighs;
 
     /** \brief Store the results: userID, MSE, K neighbours used for prediction */
     std::vector<result> res;
@@ -72,11 +69,11 @@ struct vertex_data {
 
     /** \brief Save the vertex data to a binary archive */
     void save(graphlab::oarchive& arc) const { 
-        arc << ratings << neighs;
+        arc << ratings;
     }
     /** \brief Load the vertex data from a binary archive */
     void load(graphlab::iarchive& arc) { 
-        arc >> ratings >> neighs;
+        arc >> ratings;
     }
 }; // end of vertex data
 
@@ -209,7 +206,79 @@ public:
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_neigh& sum) {
-        vertex.data().neighs = sum.neighs;
+        
+        std::vector<result> res(rat.cols()); // Store all the results
+        result res_usr; // Store user result
+        // Iterate over all the ratings of the movie
+        for (map::iterator it = vertex.data().ratings.begin(); 
+             it != vertex.data().ratings.end(); ++it) {
+            
+            unsigned usr = it->first;
+            user_precomp_data user_data_usr = user_data[usr];
+            VectorXd usr_rat(sum.neighs.size(), 1);
+            VectorXd vv(sum.neighs.size(), 1);
+            MatrixXd uu_hh(sum.neighs.size(), sum.neighs.size());
+        
+            MatrixXd uu = user_data_usr.eigen_vectors;
+        
+            unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
+            for (unsigned i = 0; i < uu.cols(); ++i)
+                vv(i, 0) = uu(movie_ind, i);
+                
+            unsigned ind = 0;
+            // Iterate over all the movies rated by the same user
+            for (int_map::iterator it = user_data_usr.movie_list.begin(); 
+                 it != user_data_usr.movie_list.end(); ++it) {
+                
+                // Check if movie is connected to the test (central) movie
+                if (sum.neighs[it->first] != sum.neighs.end()) {
+                    usr_rat(ind, 0) = sum.neighs[it->first];
+                    for (unsigned i = 0; i < uu.cols(); ++i)
+                        uu_hh(ind, i) = uu(it->second, i);
+                    ind++;
+                }
+            }
+            // Resize the matrices and vectors
+            usr_rat.conservativeResize(ind);
+            uu_hh.conservativeResize(ind, uu_hh.cols());
+            
+            double w_lim = user_data_usr.sigs_min[movie_ind];
+            unsigned lim;
+            VectorXd eigen_values = user_data_usr.eigen_values;
+            for (lim = 0; lim < eigen_values().rows(); ++lim)
+                if (eigen_values(lim, 0) > w_lim)
+                    break;
+                
+            if (lim < 2)
+                lim = 2;
+            
+            vv.resize(lim);
+            uu_hh.resize(uu_hh.rows(), lim);
+            
+            // Compute rating prediction
+            MatrixXd mm(lim, lim);
+            mm = uu_hh.transpose() * uu_hh;
+            
+            double rat_mean = usr_rat.sum() / usr_rat.rows();
+            VectorXd usr_rat_unmean = usr_rat.array() - rat_mean;
+            //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
+            double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
+            rat_pred += rat_mean;
+            
+            // Set boundaries to the rating result (should be between 1 and 5)
+            if (rat_pred > 5)
+                rat_pred = 5;
+            if (rat_pred < 1)
+                rat_pred = 1;
+            
+            double err = pow(rat_real - rat_pred, 2);
+            
+            res_usr.user_id = indexed_users[usr];
+            res_usr.mse = err;
+            res_usr.kk = usr_rat_clean.rows();
+            res[usr] = res_usr;
+        }
+        vertex.data().res = res;
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -219,330 +288,6 @@ public:
     }
 
 }; // end of als vertex program
-
-class gather_type_2 {
-public:
-    
-    vert_map vertices;
-    
-    /** \brief basic default constructor */
-    gather_type_2() { }
-    
-    gather_type_2(graph_type::vertex_id_type vv, vertex_data data) {
-        vertices[vv] = data;
-    }
-    
-    /** \brief Save the values to a binary archive */
-    void save(graphlab::oarchive& arc) const { arc << vertices; }
-    
-    /** \brief Read the values from a binary archive */
-    void load(graphlab::iarchive& arc) { arc >> vertices; }
-    
-    /** 
-     * \brief joins two neighs maps
-     */
-    gather_type_2& operator+=(const gather_type_2& other) {
-        vert_map other_vertices = other.vertices;
-        
-        for (vert_map::iterator it = other_vertices.begin(); it != other_vertices.end(); ++it){
-            vertices[it->first] = other_vertices[it->first];
-        }
-        return *this;
-    } // end of operator+=
-}; // end of gather type
-
-
-/**
- * \brief Compute the KNN for each rating in the vertices
- */
-class vertex_program : 
-    public graphlab::ivertex_program<graph_type, gather_type_2>,
-    public graphlab::IS_POD_TYPE {
-public:
-
-    /** The set of edges to gather along */
-    edge_dir_type gather_edges(icontext_type& context, 
-                                const vertex_type& vertex) const { 
-        return graphlab::OUT_EDGES; 
-    }; // end of gather_edges 
-
-    /** The gather function */
-    gather_type_2 gather(icontext_type& context, const vertex_type& vertex, 
-                       edge_type& edge) const {
-        return gather_type_2(edge.target().id(), edge.target().data());
-    } // end of gather function
-
-    void apply(icontext_type& context, vertex_type& vertex,
-               const gather_type_2& sum) {
-
-        // Do the computation on a limited percentage of nodes
-        if ((unsigned int)(rand() % 100) < comp_pct) {
-
-        int_map indices; // Maps each vertex ID to 0..N
-        unsigned int mat_size = sum.vertices.size() + 1; // Number nodes in the local graph
-    
-        if (mat_size < 3)
-            return;
-
-        // W: Adjacency Matrix
-        // MatrixXd ww(mat_size, mat_size);
-        MatrixXd ww(mat_size, mat_size); 
-        
-        ww.setZero();
-        /*for (unsigned i = 0; i < ww.rows();  ++i)
-            for (unsigned j = 0; j < ww.cols();  ++j)
-                ww(i, j) = 0;*/
-        //std::cout << "check1" << std::endl;
-
-        // Saves all the vertices of the local graph
-        vert_map vertices = sum.vertices; 
-        vert_map indexed_vertices; // Local graph vertices indexed (can be accessed by 0..N)
-        map vertex_neighs = vertex.data().neighs; // Copy of neighbour map
-        map neighs_neighs; // Temorary store the neighbours' neighbours of a node
-        
-        
-        // Map the vertices into indices
-        unsigned int ind = 0;
-        indices[vertex.id()] = ind;
-        ind++;
-        for (vert_map::iterator it = vertices.begin(); it != vertices.end(); ++it){
-            indices[it->first] = ind;
-            indexed_vertices[ind] = vertices[it->first];
-            ind++;
-        }
-        
-        // Add the main vertex to the map
-        vertices[vertex.id()] = vertex.data();
-        indexed_vertices[0] = vertex.data();
-        
-        // Save a rating matrix, where columns are users and rows are movie ratings
-        // The rating will be 0 if the user hasn't rated the movie
-        MatrixXd rat(mat_size, indexed_vertices[0].ratings.size());
-        map indexed_users;
-        ind = 0;
-        for (map::iterator it = indexed_vertices[0].ratings.begin(); it != indexed_vertices[0].ratings.end(); ++it){
-            indexed_users[ind] = it->first;
-            rat(0, ind) = it->second;
-            ind++;
-        }
-        
-        for (unsigned i = 1; i < mat_size; ++i) {
-            for (unsigned j = 0; j < indexed_users.size(); ++j) {
-                if (indexed_vertices[i].ratings.find(indexed_users[j]) == indexed_vertices[i].ratings.end())
-                    rat(i, j) = 0;
-                else
-                    rat(i, j) = indexed_vertices[i].ratings[indexed_users[j]];
-            }
-        }
-
-        // Calculate adjacency matrix
-        for (map::iterator it = vertex_neighs.begin(); it != vertex_neighs.end(); ++it){
-            neighs_neighs = vertices[it->first].neighs;
-            for (map::iterator it2 = neighs_neighs.begin(); it2 != neighs_neighs.end(); ++it2){
-                ww(indices[it->first] , indices[it2->first]) = neighs_neighs[it2->first];
-            }
-            ww(0, indices[it->first]) = vertex_neighs[it->first];
-            // For some reason, the first colum is wrongly writen when iterating neighs_neighs, this should fix it
-            ww(indices[it->first], 0) = vertex_neighs[it->first];
-        }
-        
-        // Print the W matrix for testing purposes (Use only with very small datasets)
-        /*for (unsigned i = 0; i < ww.rows();  ++i) {
-            for (unsigned j = 0; j < ww.cols();  ++j) {
-                std::cout << ww(i, j) << " ";
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;*/
-        
-
-        // Calculate D: Diagonal Degree Matrix
-        MatrixXd dd(mat_size, mat_size);
-        dd.setZero();
-        /*for (unsigned i = 0; i < dd.rows();  ++i)
-            for (unsigned j = 0; j < dd.cols();  ++j)
-                dd(i, j) = 0;*/
-          
-        double count;
-        for (unsigned i = 0; i < ww.rows();  ++i) {
-            count = 0;
-            for (unsigned j = 0; j < ww.cols();  ++j) {
-                count += ww(i, j);
-            }
-            dd(i, i) = count;
-        }
-
-        // Calculate L: Laplacian Matrix
-        MatrixXd ll(mat_size, mat_size);
-        ll = dd - ww;
-
-        // Calculate L2: Normalized Laplacian Matrix
-        MatrixXd ll2(mat_size, mat_size); // Normalized Laplacian Matrix
-        MatrixXd dd2 = dd.inverse(); // Store D^(-1/2)
-        
-        for (unsigned i = 0; i < dd.rows();  ++i)
-            for (unsigned j = 0; j < dd.cols();  ++j)
-                dd2(i, j) = sqrt(dd2(i, j));
-
-        ll2 = dd2 * ll * dd2;
-        
-        // SVD descomposition
-        // !! This Matrix is big, this operation takes time
-        SelfAdjointEigenSolver<MatrixXd> es(ll2);
-        
-        /*if (vertex.id() == 2) {
-            std::cout << ww << std::endl;
-            std::cout << ll2 << std::endl;
-        }*/
-
-        //std::cout << "Check 1" << std::endl;
-        
-        // For each user ...
-        //
-        //
-
-        std::vector<result> res(rat.cols()); // Store all the results
-        result res_usr; // Store user result
-
-        for (unsigned usr = 0; usr < rat.cols(); ++usr) {
-        
-            VectorXd usr_rat(mat_size, 1); // Vector storing movie ratings for each user (0 means unrated)
-            for (unsigned i = 0; i < mat_size; ++i)
-                usr_rat(i, 0) = rat(i, usr);
-            
-            double rat_real = rat(0, usr); // User rating we want to predict
-
-            // Calculate limiting frequency w for each user
-            double w_lim = 0; // limiting frequency (max value for eigenvalue)
-            unsigned ll2_h_size = 0;
-            usr_rat(0, 0) = 0; // The rating we want to predict acts as an unknoun rating
-            bool unrated[mat_size]; // Bool array to know if a movie has been rated by the user
-            for (unsigned i = 0; i < usr_rat.rows(); ++i) {
-                if (usr_rat(i, 0) == 0) {
-                    ll2_h_size++;
-                    unrated[i] = true;
-                } else
-                    unrated[i] = false;
-            }
-            
-            //std::cout << "Check 2" << std::endl;
-
-            // Create the Normalized Laplacian head Matrix with the non-rated movies
-            MatrixXd ll2_h(ll2_h_size, mat_size);
-            //for (unsigned i = 0; i < ll2.cols(); ++i)
-            //    ll2_h(0, i) = ll2(0, i);
-
-            //std::cout << "Check 2.1" << std::endl;
-
-            ind = 0;
-            for (unsigned i = 0; i < ll2.rows(); ++i) {
-                if (unrated[i]) {
-                    for (unsigned j = 0; j < ll2.cols(); ++j)
-                        ll2_h(ind, j) = ll2(i, j);
-                    ind++;
-                }
-            }
-
-            //std::cout << "Check 2.2" << std::endl;
-            
-            SelfAdjointEigenSolver<MatrixXd> es0(ll2_h * ll2_h.transpose());
-            w_lim = sqrt(es0.eigenvalues().minCoeff());
-            
-            /*
-            for (unsigned j = 0; j < ll2.cols();  ++j)
-                w_lim += ll2(0, j) * ll2(0, j);
-            w_lim = sqrt(w_lim) + 0.001;
-            */
-
-            unsigned lim;
-            VectorXd eigen_values = es.eigenvalues();
-            for (lim = 0; lim < es.eigenvalues().rows(); ++lim)
-                if (eigen_values(lim, 0) > w_lim)
-                    break;
-
-            if (lim < 2)
-                lim = 2;
-            
-            //std::cout << "Check 2.25" << std::endl;
-
-            // Find U head, U head head and v
-            MatrixXd uu_h(mat_size, lim);
-            MatrixXd eigen_vectors = es.eigenvectors();
-            for (unsigned i = 0; i < es.eigenvectors().rows(); ++i)
-                for (unsigned j = 0; j < lim; ++j)
-                    uu_h(i, j) = eigen_vectors(i, j);
-
-            VectorXd vv(lim, 1);
-            MatrixXd uu_hh(mat_size - ll2_h.rows() , lim);
-            
-            for (unsigned i = 0; i < lim; ++i)
-                vv(i, 0) = uu_h(0, i);
-            
-            //std::cout << "Check 2.5" << std::endl;
-
-            VectorXd usr_rat_clean(mat_size - ll2_h.rows(), 1);
-            ind = 0;
-            for (unsigned i = 0; i < mat_size; ++i) {
-                if(!unrated[i]) {
-                    for (unsigned j = 0; j < lim; ++j)
-                        uu_hh(ind, j) = uu_h(i, j);
-                    usr_rat_clean(ind, 0) = usr_rat(i, 0);
-                    ind++;
-                }
-            }
-
-            //std::cout << "Check 3" << std::endl;
-
-            // Compute rating prediction
-            MatrixXd mm(lim, lim);
-            mm = uu_hh.transpose() * uu_hh;
-            
-            double rat_mean = usr_rat_clean.sum() / usr_rat_clean.rows();
-            VectorXd usr_rat_unmean = usr_rat_clean.array() - rat_mean;
-            //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
-            double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
-            rat_pred += rat_mean;
-
-            // Set boundaries to the rating result (should be between 1 and 5)
-            if (rat_pred > 5)
-                rat_pred = 5;
-            if (rat_pred < 1)
-                rat_pred = 1;
-
-            double err = pow(rat_real - rat_pred, 2);
- 
-            /*if (vertex.id() == 2 && rat_real == 5) { */
-            //if (err > 16) {
-            if (verbose) {
-                std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << indexed_users[usr] << " ====" << std::endl;
-                std::cout << "ww: " << std::endl << ww << std::endl;
-                std::cout << "ll2: " << std::endl << ll2 << std::endl;
-                std::cout << "EigenVectors: " << std::endl << eigen_vectors << std::endl;
-                std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
-                std::cout << "ratings: " << std::endl << usr_rat << std::endl;
-                std::cout << "Real rat: " << rat_real << std::endl;
-                std::cout << "w_lim: " << w_lim << std::endl;
-                std::cout << "vv: " << std::endl << vv << std::endl;
-                std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
-                std::cout << "uu_h" << std::endl << uu_h << std::endl;
-                std::cout << "Pred rat: " << rat_pred << std::endl;
-                std::cout << std::endl << std::endl;
-            }
-            res_usr.user_id = indexed_users[usr];
-            res_usr.mse = err;
-            res_usr.kk = usr_rat_clean.rows();
-            res[usr] = res_usr;
-        }
-        vertex.data().res = res;
-    
-    } // end of if random ...
-    } // end of apply
-
-    // No scatter needed. Return NO_EDGES
-    edge_dir_type scatter_edges(icontext_type& context,
-                                const vertex_type& vertex) const {
-        return graphlab::NO_EDGES;
-    }
     
     /**
     * \brief Signal all test vertices (25%)
@@ -713,29 +458,8 @@ int main(int argc, char** argv) {
             << "Updates executed: " << engine.num_updates() << std::endl
             << "Update Rate (updates/second): " 
             << engine.num_updates() / runtime << std::endl;
-            
-    dc.cout() << "Creating engine 2" << std::endl;
-    graphlab::omni_engine<vertex_program> engine2(dc, graph, "sync");
-        
-    //TODO Signal test vertices (test user ratings)
-    //engine2.map_reduce_vertices<graphlab::empty>(vertex_program::signal_test);
-    engine2.signal_all();
-        
-    // Run 2nd engine
-    dc.cout() << "Running ..." << std::endl;
-    timer.start();
-    engine2.start();
 
-    const double runtime2 = timer.current_time();
-    dc.cout() << "----------------------------------------------------------"
-            << std::endl
-            << "Final Runtime (seconds):   " << runtime2
-            << std::endl
-            << "Updates executed: " << engine2.num_updates() << std::endl
-            << "Update Rate (updates/second): " 
-            << engine2.num_updates() / runtime << std::endl;
-            
-    
+
     /* engine.add_vertex_aggregator<float>("error",
                                         error_vertex_data,
                                         print_finalize);
