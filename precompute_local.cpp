@@ -269,9 +269,12 @@ int main () {
         for (unsigned i = 0; i < eigen_values.rows(); ++i)
             strm << eigen_values(i, 0) << " ";
         strm << std::endl;
-        for (unsigned i = 0; i < eigen_vectors.rows(); ++i)
-            for (unsigned j = 0; j < eigen_values.cols(); ++j)
+        //std::cout << eigen_vectors.rows() << " " << eigen_vectors.cols() << std::endl;
+        for (unsigned i = 0; i < eigen_vectors.rows(); ++i) {
+            for (unsigned j = 0; j < eigen_vectors.cols(); ++j) {
                 strm << eigen_vectors(i, j) << " ";
+            }
+        }
         strm << std::endl;
         offile << strm.str();
         offile.close();
