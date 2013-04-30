@@ -405,6 +405,7 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
 
     }
     infile.close();
+    std::cout << "Loaded " << usr_data.size() << " test users" << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -430,8 +431,10 @@ int main(int argc, char** argv) {
         verbose = true;
 
     dc.cout() << "Loading precomputed data." << std::endl;
-
+    timer.start();
     load_precomputed_data("out_eigen_", user_data);
+    dc.cout() << "Loaded precomputed data in "
+              << timer.current_time() << std::endl;
 
     dc.cout() << "Loading graph." << std::endl;
     graphlab::timer timer; 
