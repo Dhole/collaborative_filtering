@@ -22,6 +22,7 @@
 #include <Eigen/Dense>
 #include <stdlib.h>     /* srand, rand */
 #include <time.h>       /* time */
+#include <assert.h>     /* assert */
 
 using namespace graphlab;
 //using namespace boost::numeric::ublas;
@@ -154,33 +155,34 @@ bool graph_test_loader(graph_type& graph,
 
 class gather_type_neigh {
 public:
-    
-    map neighs;
+
+    vert_map vertices;
     
     /** \brief basic default constructor */
     gather_type_neigh() { }
     
-    gather_type_neigh(graph_type::vertex_id_type vv, double obs) {
-        neighs[vv] = obs;
+    gather_type_neigh(graph_type::vertex_id_type vv, vertex_data data) {
+        vertices[vv] = data;
     }
     
     /** \brief Save the values to a binary archive */
-    void save(graphlab::oarchive& arc) const { arc << neighs; }
+    void save(graphlab::oarchive& arc) const { arc << vertices; }
     
     /** \brief Read the values from a binary archive */
-    void load(graphlab::iarchive& arc) { arc >> neighs; }
+    void load(graphlab::iarchive& arc) { arc >> vertices; }
     
     /** 
      * \brief joins two neighs maps
      */
     gather_type_neigh& operator+=(const gather_type_neigh& other) {
-        map other_neighs = other.neighs;
+        vert_map other_vertices = other.vertices;
         
-        for (map::iterator it = other_neighs.begin(); it != other_neighs.end(); ++it){
-            neighs[it->first] = other_neighs[it->first];
+        for (vert_map::iterator it = other_vertices.begin(); it != other_vertices.end(); ++it){
+            vertices[it->first] = other_vertices[it->first];
         }
         return *this;
     } // end of operator+=
+
 }; // end of gather type
 
 
@@ -201,23 +203,26 @@ public:
     /** The gather function */
     gather_type_neigh gather(icontext_type& context, const vertex_type& vertex, 
                        edge_type& edge) const {
-        return gather_type_neigh(edge.target().id(), edge.data().obs);
+        return gather_type_neigh(edge.target().id(), edge.target().data());
     } // end of gather function
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_neigh& sum) {
         
-        std::vector<result> res(rat.cols()); // Store all the results
+        std::vector<result> res; // Store all the results
         result res_usr; // Store user result
+        double rat_real;
+        vert_map vertex_neighs = sum.vertices; // Copy of neighbour map
         // Iterate over all the ratings of the movie
         for (map::iterator it = vertex.data().ratings.begin(); 
              it != vertex.data().ratings.end(); ++it) {
             
             unsigned usr = it->first;
             user_precomp_data user_data_usr = user_data[usr];
-            VectorXd usr_rat(sum.neighs.size(), 1);
-            VectorXd vv(sum.neighs.size(), 1);
-            MatrixXd uu_hh(sum.neighs.size(), sum.neighs.size());
+            rat_real = it->second;
+            VectorXd usr_rat(vertex_neighs.size(), 1);
+            VectorXd vv(vertex_neighs.size(), 1);
+            MatrixXd uu_hh(vertex_neighs.size(), vertex_neighs.size());
         
             MatrixXd uu = user_data_usr.eigen_vectors;
         
@@ -227,14 +232,14 @@ public:
                 
             unsigned ind = 0;
             // Iterate over all the movies rated by the same user
-            for (int_map::iterator it = user_data_usr.movie_list.begin(); 
-                 it != user_data_usr.movie_list.end(); ++it) {
+            for (int_map::iterator it2 = user_data_usr.movie_list.begin(); 
+                 it2 != user_data_usr.movie_list.end(); ++it2) {
                 
                 // Check if movie is connected to the test (central) movie
-                if (sum.neighs[it->first] != sum.neighs.end()) {
-                    usr_rat(ind, 0) = sum.neighs[it->first];
+                if (vertex_neighs.find(it2->first) != vertex_neighs.end()) {
+                    usr_rat(ind, 0) = vertex_neighs[it2->first].ratings[it->first];
                     for (unsigned i = 0; i < uu.cols(); ++i)
-                        uu_hh(ind, i) = uu(it->second, i);
+                        uu_hh(ind, i) = uu(it2->second, i);
                     ind++;
                 }
             }
@@ -245,7 +250,7 @@ public:
             double w_lim = user_data_usr.sigs_min[movie_ind];
             unsigned lim;
             VectorXd eigen_values = user_data_usr.eigen_values;
-            for (lim = 0; lim < eigen_values().rows(); ++lim)
+            for (lim = 0; lim < eigen_values.rows(); ++lim)
                 if (eigen_values(lim, 0) > w_lim)
                     break;
                 
@@ -272,24 +277,27 @@ public:
                 rat_pred = 1;
             
             double err = pow(rat_real - rat_pred, 2);
-            
+
             if (verbose) {
                 std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr << " ====" << std::endl;
                 std::cout << "EigenVectors: " << std::endl << uu << std::endl;
                 std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
                 std::cout << "ratings: " << std::endl << usr_rat << std::endl;
                 std::cout << "Real rat: " << rat_real << std::endl;
-                std::cout << "w_lim: " << w_lim << std::endl;
+                //std::cout << "w_lim: " << w_lim << std::endl;
                 std::cout << "vv: " << std::endl << vv << std::endl;
                 std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
                 std::cout << "Pred rat: " << rat_pred << std::endl;
+                //std::cout << "uu: " << std::endl << uu << std::endl;
                 std::cout << std::endl << std::endl;
+                assert(0);
             }
+            // std::cout << err << " ";
             
-            res_usr.user_id = indexed_users[usr];
+            res_usr.user_id = usr;
             res_usr.mse = err;
-            res_usr.kk = usr_rat_clean.rows();
-            res[usr] = res_usr;
+            res_usr.kk = usr_rat.rows();
+            res.push_back(res_usr);
         }
         vertex.data().res = res;
     } // end of apply
@@ -302,18 +310,6 @@ public:
 
 }; // end of als vertex program
     
-    /**
-    * \brief Signal all test vertices (25%)
-    */
-    static graphlab::empty signal_test(icontext_type& context,
-                                       const vertex_type& vertex) {
-        if(vertex.id() % 4  == 0) 
-            context.signal(vertex);
-        return graphlab::empty();
-    } // end of signal_left
-
-}; // end of als vertex program
-
 /**
  * \brief Saves the results
  */
@@ -358,6 +354,7 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
                 movie_list.clear();
                 for (unsigned i = 0; i < kk; ++i) {
                     parseline >> movie_id >> sig_min;
+                    assert(!parseline.fail());                        
                     //movie_list.push_back(movie_id);
                     movie_list[movie_id] = i;
                     sigs_min.push_back(sig_min);
@@ -370,6 +367,7 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
             case 1: // EigenValues
                 for (unsigned i = 0; i < mm; ++i) {
                     parseline >> val;
+                    assert(!parseline.fail());
                     eigen_values(i, 0) = val;
                 }
                 user.eigen_values = eigen_values;
@@ -377,14 +375,22 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
                 break;
 
             case 2: // EigenVectors
-                for (unsigned i = 0; i < mm*kk; ++i) {
-                    parseline >> val;
-                    eigen_vectors(i / mm, i % mm) = val;
+                //for (unsigned i = 0; i < mm*kk; ++i) {
+                //    parseline >> val;
+                //    eigen_vectors(i / mm, i % mm) = val;
+                //}
+                for (unsigned i = 0; i < kk; ++i) {
+                    for (unsigned j = 0; j << mm; ++j) {
+                        parseline >> val;
+                        assert(!parseline.fail());
+                        eigen_vectors(i, j) = val;
+                    }
                 }
                 user.eigen_vectors = eigen_vectors;
                 usr_data[user_id] = user;
                 state = 0;
                 //std::cout << user.movie_list.size() << " " << std::endl;
+                //std::cout << "Eigen Vectors: " << std::endl << eigen_vectors << std::endl;
                 break;
         }
 
