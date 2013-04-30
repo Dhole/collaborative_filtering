@@ -229,6 +229,8 @@ public:
             unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
             for (unsigned i = 0; i < uu.cols(); ++i)
                 vv(i, 0) = uu(movie_ind, i);
+
+            std::cout << "Iep VV:" << std::endl << vv << std::endl;
                 
             unsigned ind = 0;
             // Iterate over all the movies rated by the same user
@@ -278,7 +280,7 @@ public:
             
             double err = pow(rat_real - rat_pred, 2);
 
-            if (verbose) {
+            if (verbose && vertex.id() == 71) {
                 std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr << " ====" << std::endl;
                 std::cout << "EigenVectors: " << std::endl << uu << std::endl;
                 std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
@@ -380,13 +382,18 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
                 //    eigen_vectors(i / mm, i % mm) = val;
                 //}
                 for (unsigned i = 0; i < kk; ++i) {
-                    for (unsigned j = 0; j << mm; ++j) {
+                    for (unsigned j = 0; j < mm; ++j) {
                         parseline >> val;
                         assert(!parseline.fail());
+                        //std::cout << val << " ";
                         eigen_vectors(i, j) = val;
                     }
                 }
                 user.eigen_vectors = eigen_vectors;
+                if (verbose) {
+                    std::cout << "Eigen Values:" << std::endl << eigen_values << std::endl;
+                    std::cout << "Eigen Vectors:" << std::endl << eigen_vectors << std::endl;
+                }
                 usr_data[user_id] = user;
                 state = 0;
                 //std::cout << user.movie_list.size() << " " << std::endl;
