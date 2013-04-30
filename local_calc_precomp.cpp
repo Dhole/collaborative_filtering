@@ -220,17 +220,19 @@ public:
             unsigned usr = it->first;
             user_precomp_data user_data_usr = user_data[usr];
             rat_real = it->second;
-            VectorXd usr_rat(vertex_neighs.size(), 1);
-            VectorXd vv(vertex_neighs.size(), 1);
-            MatrixXd uu_hh(vertex_neighs.size(), vertex_neighs.size());
+            VectorXd usr_rat(user_data_usr.movie_list.size(), 1);
+            VectorXd vv(user_data_usr.movie_list.size(), 1);
+            MatrixXd uu_hh(user_data_usr.movie_list.size(), user_data_usr.movie_list.size());
         
             MatrixXd uu = user_data_usr.eigen_vectors;
         
             unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
             for (unsigned i = 0; i < uu.cols(); ++i)
                 vv(i, 0) = uu(movie_ind, i);
-
-            std::cout << "Iep VV:" << std::endl << vv << std::endl;
+            
+            if (verbose && vertex.id() == 71)
+                std::cout << "Iep VV:" << std::endl << vv << std::endl;
+            // vv is good here
                 
             unsigned ind = 0;
             // Iterate over all the movies rated by the same user
@@ -259,8 +261,8 @@ public:
             if (lim < 2)
                 lim = 2;
             
-            vv.resize(lim);
-            uu_hh.resize(uu_hh.rows(), lim);
+            vv.conservativeResize(lim);
+            uu_hh.conservativeResize(uu_hh.rows(), lim);
             
             // Compute rating prediction
             MatrixXd mm(lim, lim);
@@ -292,7 +294,7 @@ public:
                 std::cout << "Pred rat: " << rat_pred << std::endl;
                 //std::cout << "uu: " << std::endl << uu << std::endl;
                 std::cout << std::endl << std::endl;
-                assert(0);
+                //assert(0);
             }
             // std::cout << err << " ";
             

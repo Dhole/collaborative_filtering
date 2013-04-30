@@ -23,5 +23,11 @@ local_calc_precomp is symmilar to local_calc, but instead of computing the Lapla
     This should speed the process.
 
 
+TODO:
+    - Save the eigen vectors and eigen values in binary format instead of text format so that we get smaller files
+    - Use functions in the code to do the rating prediction with matrix as inputs (so that the algebra computation
+        can be easily identified)
+
+
 
 [1] SIGNALPROCESSING TECHNIQUES FOR INTERPOLATION IN GRAPHDATA by Sunil K Narang, Akshay Gadde and Antonio Ortega
