@@ -23,6 +23,7 @@
 #include <stdlib.h>     /* srand, rand */
 #include <time.h>       /* time */
 #include <assert.h>     /* assert */
+#include <boost/thread.hpp>
 
 using namespace graphlab;
 //using namespace boost::numeric::ublas;
@@ -53,6 +54,12 @@ typedef boost::unordered_map<vertex_id_type, user_precomp_data> user_map;
 bool verbose = false;
 unsigned int comp_pct = 100; // Percentage of nodes where the computation will happen
 user_map user_data;
+unsigned int n_vertices_done = 0;
+unsigned int n_vertices_total;
+boost::mutex n_vertices_done_mutex;
+double elapsed_time = 0;
+graphlab::timer timer_glob;
+
 
 /**
  * \brief The vertex data stores the movie rating information.
@@ -209,6 +216,8 @@ public:
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_neigh& sum) {
         
+        //graphlab::timer timer1;
+        //timer1.start();
         std::vector<result> res; // Store all the results
         result res_usr; // Store user result
         double rat_real;
@@ -225,15 +234,15 @@ public:
             MatrixXd uu_hh(user_data_usr.movie_list.size(), user_data_usr.movie_list.size());
         
             MatrixXd uu = user_data_usr.eigen_vectors;
+
+            if (verbose) {
+                std::cout << ":::: movieID: " << vertex.id() << " userID: " << usr << " ::::" << std::endl;
+            }
         
             unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
             for (unsigned i = 0; i < uu.cols(); ++i)
                 vv(i, 0) = uu(movie_ind, i);
             
-            if (verbose && vertex.id() == 71)
-                std::cout << "Iep VV:" << std::endl << vv << std::endl;
-            // vv is good here
-                
             unsigned ind = 0;
             // Iterate over all the movies rated by the same user
             for (int_map::iterator it2 = user_data_usr.movie_list.begin(); 
@@ -251,6 +260,7 @@ public:
             usr_rat.conservativeResize(ind);
             uu_hh.conservativeResize(ind, uu_hh.cols());
             
+            //!! Segmentation fault here
             double w_lim = user_data_usr.sigs_min[movie_ind];
             unsigned lim;
             VectorXd eigen_values = user_data_usr.eigen_values;
@@ -282,10 +292,18 @@ public:
             
             double err = pow(rat_real - rat_pred, 2);
 
-            if (verbose && vertex.id() == 71) {
+            if (verbose && isnan(err) && usr == 2147482760) {
                 std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr << " ====" << std::endl;
-                std::cout << "EigenVectors: " << std::endl << uu << std::endl;
-                std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
+                //std::cout << "EigenVectors: " << std::endl << uu << std::endl;
+                //std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
+                std::cout << "Movies rated by user: " << uu.rows() << std::endl;
+                std::cout << "Movies connected: " << uu_hh.rows() << std::endl;
+                std::cout << "Eigenvectors stored: " << uu.cols() << std::endl;
+                std::cout << "Eigenvectors used: " << uu_hh.cols() << std::endl;
+                //std::cout << "vv.transpose() " << std::endl << vv.transpose() << std::endl;
+                //std::cout << "mm.inverse()" << std::endl << mm.inverse() << std::endl;
+                //std::cout << "uu_hh.tranpose()" << std::endl << uu_hh.transpose() << std::endl;
+                std::cout << "usr_rat_unmean" << std::endl << usr_rat_unmean << std::endl;
                 std::cout << "ratings: " << std::endl << usr_rat << std::endl;
                 std::cout << "Real rat: " << rat_real << std::endl;
                 //std::cout << "w_lim: " << w_lim << std::endl;
@@ -294,9 +312,10 @@ public:
                 std::cout << "Pred rat: " << rat_pred << std::endl;
                 //std::cout << "uu: " << std::endl << uu << std::endl;
                 std::cout << std::endl << std::endl;
-                //assert(0);
+                assert(0);
             }
-            // std::cout << err << " ";
+            //std::cout << err << " ";
+            //std::cout << "OLA K ASE ";
             
             res_usr.user_id = usr;
             res_usr.mse = err;
@@ -304,6 +323,22 @@ public:
             res.push_back(res_usr);
         }
         vertex.data().res = res;
+        
+        //double spent_time = timer1.current_time();
+        
+        // Race condition Fuck Yeah!
+        //boost::lock_guard<boost::mutex> lock(n_vertices_done_mutex);
+        n_vertices_done++;
+        //elapsed_time += spent_time;
+        //boost::lock_guard<boost::mutex> unlock(n_vertices_done_mutex);
+
+        std::cout << (float)n_vertices_done / n_vertices_total * 100 << "%\n";
+        //Since graphlab uses various threads to compute various vertices at the same time, this will not work
+        std::cout << "Estimated remaining time: " 
+                  << (1 - ((float)n_vertices_done / n_vertices_total)) * 
+                  timer_glob.current_time() / ((float)n_vertices_done / n_vertices_total)
+                  << " seconds\n";
+
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -392,7 +427,7 @@ void load_precomputed_data(std::string filename, user_map &usr_data) {
                     }
                 }
                 user.eigen_vectors = eigen_vectors;
-                if (verbose) {
+                if (verbose && false) {
                     std::cout << "Eigen Values:" << std::endl << eigen_values << std::endl;
                     std::cout << "Eigen Vectors:" << std::endl << eigen_vectors << std::endl;
                 }
@@ -430,6 +465,7 @@ int main(int argc, char** argv) {
     if (verbosity == 1)
         verbose = true;
 
+    graphlab::timer timer; 
     dc.cout() << "Loading precomputed data." << std::endl;
     timer.start();
     load_precomputed_data("out_eigen_", user_data);
@@ -437,7 +473,6 @@ int main(int argc, char** argv) {
               << timer.current_time() << std::endl;
 
     dc.cout() << "Loading graph." << std::endl;
-    graphlab::timer timer; 
     graph_type graph(dc);
     // Load the graph containing the weights and connections
     graph.load("out_fin_", graph_loader);
@@ -451,6 +486,8 @@ int main(int argc, char** argv) {
     graph.finalize();
     dc.cout() << "Finalizing graph. Finished in " 
               << timer.current_time() << std::endl;
+    
+    n_vertices_total = graph.num_vertices();
     
     dc.cout() 
         << "========== Graph statistics on proc " << dc.procid() 
@@ -479,6 +516,7 @@ int main(int argc, char** argv) {
     // Run neighbour information gathering
     dc.cout() << "Running ..." << std::endl;
     timer.start();
+    timer_glob.start();
     engine.start();
 
     const double runtime = timer.current_time();

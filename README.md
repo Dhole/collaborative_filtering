@@ -27,7 +27,7 @@ TODO:
     - Save the eigen vectors and eigen values in binary format instead of text format so that we get smaller files
     - Use functions in the code to do the rating prediction with matrix as inputs (so that the algebra computation
         can be easily identified)
-
+    - Enable multi-threading in precompute_local (using a thread pool???)
 
 
 [1] SIGNALPROCESSING TECHNIQUES FOR INTERPOLATION IN GRAPHDATA by Sunil K Narang, Akshay Gadde and Antonio Ortega

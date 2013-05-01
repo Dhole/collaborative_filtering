@@ -84,7 +84,7 @@ void list_files_with_prefix(const std::string& pathname,
 int main () {
     
     std::string path = "movielens/";
-    std::string suffix = ".train";
+    std::string suffix = ".validate";
     
     map_usr users;
 
@@ -165,7 +165,6 @@ int main () {
     for (map_usr::iterator it = users.begin(); it != users.end(); ++it){
         user_id = it->first;
         ratings = it->second;
-        ww.resize(ratings.size(), ratings.size());
         std::vector<unsigned> movie_list;
         std::vector<double> sigs_min;
         
@@ -175,6 +174,7 @@ int main () {
             //std::cout << movie_id << " ";
             movie_list.push_back(movie_id);
         }
+        ww.resize(movie_list.size(), movie_list.size());
 
         n_users_done++;
         unsigned int mat_size = movie_list.size();
@@ -184,7 +184,7 @@ int main () {
         // Save adjacency matrix W
         for (unsigned i = 0; i < movie_list.size(); ++i) {
             for (unsigned j = 0; j < movie_list.size(); ++j) {
-                if (std::max(movie_list[i], movie_list[j]) > weights.rows())
+                if (std::max(movie_list[i], movie_list[j]) >= weights.rows())
                     ww(i, j) = 0;
                 else
                     ww(i, j) = weights(movie_list[i], movie_list[j]);
