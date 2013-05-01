@@ -216,6 +216,9 @@ public:
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_neigh& sum) {
         
+        // Do the computation on a limited percentage of nodes
+        if ((unsigned int)(rand() % 100) < comp_pct) {
+
         //graphlab::timer timer1;
         //timer1.start();
         std::vector<result> res; // Store all the results
@@ -331,14 +334,15 @@ public:
         n_vertices_done++;
         //elapsed_time += spent_time;
         //boost::lock_guard<boost::mutex> unlock(n_vertices_done_mutex);
+        double v_done = (float)n_vertices_done / n_vertices_total / ((float)comp_pct / 100); 
 
-        std::cout << (float)n_vertices_done / n_vertices_total * 100 << "%\n";
+        std::cout << v_done * 100 << "%\n";
         //Since graphlab uses various threads to compute various vertices at the same time, this will not work
         std::cout << "Estimated remaining time: " 
-                  << (1 - ((float)n_vertices_done / n_vertices_total)) * 
-                  timer_glob.current_time() / ((float)n_vertices_done / n_vertices_total)
-                  << " seconds\n";
-
+                  << (1 - v_done) * timer_glob.current_time() / v_done / 60
+                  << " minutes\n";
+    
+    } // end of if random ...
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
