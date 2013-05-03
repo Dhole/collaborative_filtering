@@ -295,7 +295,7 @@ public:
             
             double err = pow(rat_real - rat_pred, 2);
 
-            if (verbose && isnan(err) && usr == 2147482760) {
+            if (verbose && isnan(err)) {
                 std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr << " ====" << std::endl;
                 //std::cout << "EigenVectors: " << std::endl << uu << std::endl;
                 //std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
@@ -306,7 +306,7 @@ public:
                 //std::cout << "vv.transpose() " << std::endl << vv.transpose() << std::endl;
                 //std::cout << "mm.inverse()" << std::endl << mm.inverse() << std::endl;
                 //std::cout << "uu_hh.tranpose()" << std::endl << uu_hh.transpose() << std::endl;
-                std::cout << "usr_rat_unmean" << std::endl << usr_rat_unmean << std::endl;
+                //std::cout << "usr_rat_unmean" << std::endl << usr_rat_unmean << std::endl;
                 std::cout << "ratings: " << std::endl << usr_rat << std::endl;
                 std::cout << "Real rat: " << rat_real << std::endl;
                 //std::cout << "w_lim: " << w_lim << std::endl;
