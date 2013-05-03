@@ -18,6 +18,8 @@ precompute_local will find the laplacian and SVD decomposition of each graph mad
     eigen_values(1) eigen_values(2) eigen_values(3) ...
     eigen_vectors(0,0) eigen_vectors(0,1) eigen_values(0,2) ... eigen_vales(1,0) eigen_values(1,1) eigen_values(1,2) ...
 
+precompute_local_threads works the same way as precompute_local but uses a thread pool to paralelize the SVD computation
+
 local_calc_precomp is symmilar to local_calc, but instead of computing the Laplacian matrix and it's SVD
     decompositio for each user rating, it will preload the SVD decomposition from the file "out_eigen_".
     This should speed the process.
