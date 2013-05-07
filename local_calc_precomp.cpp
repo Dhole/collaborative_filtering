@@ -33,6 +33,7 @@ typedef boost::unordered_map<vertex_id_type, double> map;
 typedef boost::unordered_map<vertex_id_type, unsigned int> int_map;
 //typedef Matrix<double, Dynamic, Dynamic> MatrixXd;
 //typedef Matrix<double, Dynamic, 1>       VectorXd;
+typedef Matrix<unsigned, Dynamic, 1>       VectorXu;
 
 typedef struct {
     unsigned int user_id;
@@ -215,134 +216,167 @@ public:
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type_neigh& sum) {
-        
+
         // Do the computation on a limited percentage of nodes
         if ((unsigned int)(rand() % 100) < comp_pct) {
 
-        //graphlab::timer timer1;
-        //timer1.start();
-        std::vector<result> res; // Store all the results
-        result res_usr; // Store user result
-        double rat_real;
-        vert_map vertex_neighs = sum.vertices; // Copy of neighbour map
-        // Iterate over all the ratings of the movie
-        for (map::iterator it = vertex.data().ratings.begin(); 
-             it != vertex.data().ratings.end(); ++it) {
-            
-            unsigned usr = it->first;
-            user_precomp_data user_data_usr = user_data[usr];
-            rat_real = it->second;
-            VectorXd usr_rat(user_data_usr.movie_list.size(), 1);
-            VectorXd vv(user_data_usr.movie_list.size(), 1);
-            MatrixXd uu_hh(user_data_usr.movie_list.size(), user_data_usr.movie_list.size());
-        
-            MatrixXd uu = user_data_usr.eigen_vectors;
+            //graphlab::timer timer1;
+            //timer1.start();
+            std::vector<result> res; // Store all the results
+            result res_usr; // Store user result
+            double rat_real;
+            vert_map vertex_neighs = sum.vertices; // Copy of neighbour map
+            // Iterate over all the ratings of the movie
+            for (map::iterator it = vertex.data().ratings.begin(); 
+                    it != vertex.data().ratings.end(); ++it) {
 
-            if (verbose) {
-                std::cout << ":::: movieID: " << vertex.id() << " userID: " << usr << " ::::" << std::endl;
-            }
-        
-            unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
-            for (unsigned i = 0; i < uu.cols(); ++i)
-                vv(i, 0) = uu(movie_ind, i);
-            
-            unsigned ind = 0;
-            // Iterate over all the movies rated by the same user
-            for (int_map::iterator it2 = user_data_usr.movie_list.begin(); 
-                 it2 != user_data_usr.movie_list.end(); ++it2) {
-                
-                // Check if movie is connected to the test (central) movie
-                if (vertex_neighs.find(it2->first) != vertex_neighs.end()) {
-                    usr_rat(ind, 0) = vertex_neighs[it2->first].ratings[it->first];
-                    for (unsigned i = 0; i < uu.cols(); ++i)
-                        uu_hh(ind, i) = uu(it2->second, i);
-                    ind++;
+                unsigned usr = it->first;
+                user_precomp_data user_data_usr = user_data[usr];
+                rat_real = it->second;
+                VectorXd usr_rat(user_data_usr.movie_list.size(), 1);
+                VectorXd vv(user_data_usr.movie_list.size(), 1);
+                MatrixXd uu_hh(user_data_usr.movie_list.size(), user_data_usr.movie_list.size());
+
+                VectorXu connected_movies(user_data_usr.movie_list.size(), 1);
+
+                MatrixXd uu = user_data_usr.eigen_vectors;
+
+                if (verbose) {
+                    std::cout << ":::: movieID: " << vertex.id() << " userID: " << usr << " ::::" << std::endl;
                 }
-            }
-            // Resize the matrices and vectors
-            usr_rat.conservativeResize(ind);
-            uu_hh.conservativeResize(ind, uu_hh.cols());
-            
-            //!! Segmentation fault here
-            double w_lim = user_data_usr.sigs_min[movie_ind];
-            unsigned lim;
-            VectorXd eigen_values = user_data_usr.eigen_values;
-            for (lim = 0; lim < eigen_values.rows(); ++lim)
-                if (eigen_values(lim, 0) > w_lim)
-                    break;
-                
-            if (lim < 2)
-                lim = 2;
-            
-            vv.conservativeResize(lim);
-            uu_hh.conservativeResize(uu_hh.rows(), lim);
-            
-            // Compute rating prediction
-            MatrixXd mm(lim, lim);
-            mm = uu_hh.transpose() * uu_hh;
-            
-            double rat_mean = usr_rat.sum() / usr_rat.rows();
-            VectorXd usr_rat_unmean = usr_rat.array() - rat_mean;
-            //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
-            double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
-            rat_pred += rat_mean;
-            
-            // Set boundaries to the rating result (should be between 1 and 5)
-            if (rat_pred > 5)
-                rat_pred = 5;
-            if (rat_pred < 1)
-                rat_pred = 1;
-            
-            double err = pow(rat_real - rat_pred, 2);
 
-            if (verbose && isnan(err)) {
-                std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr << " ====" << std::endl;
-                //std::cout << "EigenVectors: " << std::endl << uu << std::endl;
-                //std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
-                std::cout << "Movies rated by user: " << uu.rows() << std::endl;
-                std::cout << "Movies connected: " << uu_hh.rows() << std::endl;
-                std::cout << "Eigenvectors stored: " << uu.cols() << std::endl;
-                std::cout << "Eigenvectors used: " << uu_hh.cols() << std::endl;
-                //std::cout << "vv.transpose() " << std::endl << vv.transpose() << std::endl;
-                //std::cout << "mm.inverse()" << std::endl << mm.inverse() << std::endl;
-                //std::cout << "uu_hh.tranpose()" << std::endl << uu_hh.transpose() << std::endl;
-                //std::cout << "usr_rat_unmean" << std::endl << usr_rat_unmean << std::endl;
-                std::cout << "ratings: " << std::endl << usr_rat << std::endl;
-                std::cout << "Real rat: " << rat_real << std::endl;
-                //std::cout << "w_lim: " << w_lim << std::endl;
-                std::cout << "vv: " << std::endl << vv << std::endl;
-                std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
-                std::cout << "Pred rat: " << rat_pred << std::endl;
-                //std::cout << "uu: " << std::endl << uu << std::endl;
-                std::cout << std::endl << std::endl;
-                assert(0);
-            }
-            //std::cout << err << " ";
-            //std::cout << "OLA K ASE ";
-            
-            res_usr.user_id = usr;
-            res_usr.mse = err;
-            res_usr.kk = usr_rat.rows();
-            res.push_back(res_usr);
-        }
-        vertex.data().res = res;
-        
-        //double spent_time = timer1.current_time();
-        
-        // Race condition Fuck Yeah!
-        //boost::lock_guard<boost::mutex> lock(n_vertices_done_mutex);
-        n_vertices_done++;
-        //elapsed_time += spent_time;
-        //boost::lock_guard<boost::mutex> unlock(n_vertices_done_mutex);
-        double v_done = (float)n_vertices_done / n_vertices_total / ((float)comp_pct / 100); 
+                unsigned movie_ind = user_data_usr.movie_list[vertex.id()];
+                for (unsigned i = 0; i < uu.cols(); ++i)
+                    vv(i, 0) = uu(movie_ind, i);
 
-        std::cout << v_done * 100 << "%\n";
-        //Since graphlab uses various threads to compute various vertices at the same time, this will not work
-        std::cout << "Estimated remaining time: " 
-                  << (1 - v_done) * timer_glob.current_time() / v_done / 60
-                  << " minutes\n";
-    
-    } // end of if random ...
+                unsigned ind = 0;
+                // Iterate over all the movies rated by the same user
+                for (int_map::iterator it2 = user_data_usr.movie_list.begin(); 
+                        it2 != user_data_usr.movie_list.end(); ++it2) {
+
+                    // Check if movie is connected to the test (central) movie
+                    if (vertex_neighs.find(it2->first) != vertex_neighs.end()) {
+                        usr_rat(ind, 0) = vertex_neighs[it2->first].ratings[it->first];
+                        connected_movies(ind, 0) = it2->first;
+                        for (unsigned i = 0; i < uu.cols(); ++i)
+                            uu_hh(ind, i) = uu(it2->second, i);
+                        ind++;
+                    }
+                }
+                // Resize the matrices and vectors
+                usr_rat.conservativeResize(ind);
+                connected_movies.conservativeResize(ind);
+                uu_hh.conservativeResize(ind, uu_hh.cols());
+
+                double w_lim = user_data_usr.sigs_min[movie_ind];
+                unsigned lim;
+                VectorXd eigen_values = user_data_usr.eigen_values;
+                for (lim = 0; lim < eigen_values.rows(); ++lim)
+                    if (eigen_values(lim, 0) > w_lim)
+                        break;
+
+                if (lim < 2)
+                    lim = 2;
+
+                vv.conservativeResize(lim);
+                uu_hh.conservativeResize(uu_hh.rows(), lim);
+
+                // Delete zero columns in order to avoid NaNs
+                ind = 0;
+                MatrixXd uu_hh_clean(uu_hh.rows(), uu_hh.cols());
+                VectorXd vv_clean(vv.rows());
+                for (unsigned i = 0; i < uu_hh.cols(); ++i) {
+                    unsigned k;
+                    for (k = 0; k < uu_hh.rows(); ++k) {
+                        if (uu_hh(k, i) >= 0.0001)
+                            break;
+                    }
+                    if (k < uu_hh.rows()) {
+                        for (unsigned j = 0; j < uu_hh.rows(); ++j)                            
+                            uu_hh_clean(j, ind) = uu_hh(j, i);
+                        vv_clean(ind) = vv(i);
+                        ind++;
+                    }
+                }
+                vv_clean.conservativeResize(ind);
+                uu_hh_clean.conservativeResize(uu_hh.rows(), ind);
+                vv = vv_clean;
+                uu_hh = uu_hh_clean;
+
+
+                // Compute rating prediction
+                MatrixXd mm(lim, lim);
+                mm = uu_hh.transpose() * uu_hh;
+
+                double rat_mean = usr_rat.sum() / usr_rat.rows();
+                VectorXd usr_rat_unmean = usr_rat.array() - rat_mean;
+                //double rat_pred = vv.transpose() * mm.inverse() * uu_hh.transpose * (usr_rat_clean - rat_mean);
+                double rat_pred = vv.transpose() * (mm.inverse() * (uu_hh.transpose() * usr_rat_unmean));
+                rat_pred += rat_mean;
+
+                // Save the computed rating
+                double rat_pred_orig = rat_pred;
+                double err_orig = pow(rat_real - rat_pred_orig, 2);
+
+                // Set boundaries to the rating result (should be between 1 and 5)
+                if (rat_pred > 5)
+                    rat_pred = 5;
+                if (rat_pred < 1)
+                    rat_pred = 1;
+
+                double err = pow(rat_real - rat_pred, 2);
+
+                if (verbose && isnan(err)) {
+                    std::cout << "==== Showing movieID: " << vertex.id() << " userID: " << usr
+                              << " ====" << std::endl;
+                    std::cout << "Movies rated by user: " << uu.rows() << std::endl;
+                    std::cout << "Movies connected: " << uu_hh.rows() << std::endl;
+                    std::cout << "Eigenvectors stored: " << uu.cols() << std::endl;
+                    std::cout << "Eigenvectors used: " << uu_hh.cols() << std::endl;
+                    //std::cout << "vv.transpose() " << std::endl << vv.transpose() << std::endl;
+                    //std::cout << "mm.inverse()" << std::endl << mm.inverse() << std::endl;
+                    //std::cout << "uu_hh.tranpose()" << std::endl << uu_hh.transpose() << std::endl;
+                    //std::cout << "usr_rat_unmean" << std::endl << usr_rat_unmean << std::endl;
+                    std::cout << "Movie ID list: " << std::endl << connected_movies << std::endl;
+                    std::cout << "ratings: " << std::endl << usr_rat << std::endl;
+                    std::cout << "Real rat: " << rat_real << std::endl;
+                    std::cout << "w_lim: " << w_lim << std::endl;
+                    std::cout << "EigenVectors: " << std::endl << uu << std::endl;
+                    std::cout << "EigenValues: " << std::endl << eigen_values << std::endl;
+                    std::cout << "vv: " << std::endl << vv << std::endl;
+                    std::cout << "uu_hh" << std::endl << uu_hh << std::endl;
+                    std::cout << "Pred rat: " << rat_pred << std::endl;
+                    std::cout << "Pred rat orig: " << rat_pred_orig << std::endl;
+                    //std::cout << "uu: " << std::endl << uu << std::endl;
+                    std::cout << std::endl << std::endl;
+                    assert(0);
+                }
+                //std::cout << err << " ";
+                //std::cout << "OLA K ASE ";
+
+                res_usr.user_id = usr;
+                res_usr.mse = err;
+                res_usr.kk = usr_rat.rows();
+                res.push_back(res_usr);
+            }
+            vertex.data().res = res;
+
+            //double spent_time = timer1.current_time();
+
+            // Race condition Fuck Yeah!
+            //boost::lock_guard<boost::mutex> lock(n_vertices_done_mutex);
+            n_vertices_done++;
+            //elapsed_time += spent_time;
+            //boost::lock_guard<boost::mutex> unlock(n_vertices_done_mutex);
+            double v_done = (float)n_vertices_done / n_vertices_total / ((float)comp_pct / 100); 
+
+            std::cout << v_done * 100 << "%\n";
+            //Since graphlab uses various threads to compute various vertices at the same time, this will not work
+            std::cout << "Estimated remaining time: " 
+                << (1 - v_done) * timer_glob.current_time() / v_done / 60
+                << " minutes\n";
+
+        } // end of if random ...
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
