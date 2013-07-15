@@ -140,7 +140,7 @@ public:
         return graphlab::NO_EDGES;
     }
 
-}; // end of knn vertex program
+}; // end of degree program
 
 /**
  * \brief Compute the initial values and do the first iteration of the 
@@ -182,12 +182,12 @@ public:
         return graphlab::NO_EDGES;
     }
 
-}; // end of knn vertex program
+}; // end of init values program
 
 /**
  * \brief Compute the next Chebychev iterations.
  */
-class init_values_program :
+class cheby_program :
     public graphlab::ivertex_program<graph_type, double>
     {
 public:
@@ -225,54 +225,7 @@ public:
         return graphlab::NO_EDGES;
     }
 
-}; // end of knn vertex program
-
-/**
- * \brief Compute the KNN for each rating in the vertices
- */
-class knn_program : 
-    public graphlab::ivertex_program<graph_type, gather_type>,
-    public graphlab::IS_POD_TYPE {
-public:
-
-    /** The set of edges to gather along */
-    edge_dir_type gather_edges(icontext_type& context, 
-                                const vertex_type& vertex) const { 
-        return graphlab::OUT_EDGES; 
-    }; // end of gather_edges 
-
-    /** The gather function */
-    gather_type gather(icontext_type& context, const vertex_type& vertex, 
-                       edge_type& edge) const {
-        map wei_rat;
-        vertex_data etd = edge.target().data();
-        for (map::iterator it = etd.ratings.begin(); it != etd.ratings.end(); ++it) 
-            wei_rat[it->first] = edge.data().obs * etd.ratings[it->first];
-        
-        return gather_type(wei_rat, edge.data().obs);
-    } // end of gather function
-
-    void apply(icontext_type& context, vertex_type& vertex,
-               const gather_type& sum) {
-        //for (map::iterator it; it != sum.ratings.end(); ++it)
-        //    graph.add_edge(vertex.id(), it->first);
-        map norm_knn;
-        map sum_ratings = sum.ratings;
-        map sum_weights = sum.weights;
-        for (map::const_iterator it = sum.ratings.begin(); it != sum.ratings.end(); ++it) {
-            //std::cout << "(" << vertex.id() << " " << sum_ratings[it->first] << " " << sum_weights[it->first] << ") ";
-            norm_knn[it->first] = sum_ratings[it->first] / sum_weights[it->first];
-        }
-        vertex.data().ratings_knn = norm_knn;
-    } // end of apply
-
-    // No scatter needed. Return NO_EDGES
-    edge_dir_type scatter_edges(icontext_type& context,
-                                const vertex_type& vertex) const {
-        return graphlab::NO_EDGES;
-    }
-
-}; // end of knn vertex program
+}; // end of cheby program
 
 typedef graphlab::omni_engine<knn_program> engine_type;
 
