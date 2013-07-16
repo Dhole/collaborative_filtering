@@ -22,7 +22,7 @@ double a2 = (arange[1] + arange[0]) / 2;
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
 int vv[4] = {2.23, 5.23, 0.19, 8.39};
-std::vector<double> coeff(&vv[0], &v[0] + 4);
+std::vector<double> coeff(&vv[0], &vv[0] + 4);
 unsigned int coeff_len = coeff.size();
 
 /** \brief index for the current iteration */
@@ -129,7 +129,7 @@ struct graph_signal_writer {
  * \brief Compute the degree of each node and store it
  */
 class degree_program : 
-    public graphlab::ivertex_program<graph_type, gather_type>
+    public graphlab::ivertex_program<graph_type, double>
     {
 public:
 
