@@ -21,10 +21,11 @@ double a2 = (arange[1] + arange[0]) / 2;
 
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
-vector<double> coeff {2.23 5.23, 0.19, 8.39};
+vector<double> coeff {2.23, 5.23, 0.19, 8.39};
+unsigned int coeff_len = coeff.size();
 
 /** \brief index for the current iteration */
-int ind = 0;
+//int ind = 0;
 
 /**
  * \brief The vertex data stores the movie rating information.
@@ -39,20 +40,22 @@ struct vertex_data {
     
     /** \brief Signal value */
     double val;
+    
+    unsigned int counter;
 
     /** \brief basic initialization */
     vertex_data() { }
     
     vertex_data(double val): 
-    val(val) { }
+    val(val), counter(2) { }
 
     /** \brief Save the vertex data to a binary archive */
     void save(graphlab::oarchive& arc) const { 
-        arc << degree << twf_old << twf_cur << twf_new << val;
+        arc << degree << twf_old << twf_cur << twf_new << val << counter;
     }
     /** \brief Load the vertex data from a binary archive */
     void load(graphlab::iarchive& arc) { 
-        arc >> degree >> twf_old >> twf_cur >> twf_new >> val;
+        arc >> degree >> twf_old >> twf_cur >> twf_new >> val >> counter;
     }
 }; // end of vertex data
 
@@ -108,6 +111,18 @@ bool graph_signal_loader(graph_type& graph,
 
     return true; // successful load
 } // end of graph_signal_loader
+
+/**
+ * \brief Saves the users rating for each training user
+ */
+struct graph_signal_writer {
+    std::string save_vertex(graph_type::vertex_type vt) {
+        std::stringstream strm;
+        strm << vt.id() << " " << vt.data().val << "\n";
+        return strm.str();
+    }
+    std::string save_edge(graph_type::edge_type e) { return ""; }
+}; // end of pagerank writer
 
 /**
  * \brief Compute the degree of each node and store it
@@ -213,10 +228,14 @@ public:
                                 - vertex.data().twf_old;
         
         vertex.data().val = vertex.data().val
-                            + coeff[ind] * vertex.data().twf_new;
+                            + coeff[vertex.data().counter] * vertex.data().twf_new;
         
         vertex.data().twf_old = vertex.data().twf_cur;
         vertex.data().twf_cur = vertex.data().twf_new;
+        
+        vertex.data().counter++;
+        if (vertex.data().counter <= coeff_len) 
+            context.signal(vertex);
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -227,9 +246,6 @@ public:
 
 }; // end of cheby program
 
-typedef graphlab::omni_engine<knn_program> engine_type;
-
-
 int main(int argc, char** argv) {
     graphlab::mpi_tools::init(argc, argv);
     graphlab::distributed_control dc;
@@ -238,9 +254,9 @@ int main(int argc, char** argv) {
     graphlab::timer timer; 
     graph_type graph(dc);
     // Load the graph containing the weights and connections
-    graph.load("out_fin_", graph_loader);
-    // Load the test user ratings (not used to build the graph)
-    graph.load("out_test_rat_", graph_test_loader); 
+    graph.load("graph_topology", graph_loader);
+    // Load the signal of the graph
+    graph.load("graph_signal", graph_signal_loader); 
     dc.cout() << "Loading graph. Finished in " 
     << timer.current_time() << std::endl;
     
@@ -269,12 +285,12 @@ int main(int argc, char** argv) {
         << float(graph.num_local_edges())/graph.num_edges()
         << std::endl;
         
-    dc.cout() << "Creating engine" << std::endl;
-    graphlab::omni_engine<knn_program> engine(dc, graph, "sync");
+    dc.cout() << "Creating engine 1 (Calculate degrees) << std::endl;
+    graphlab::omni_engine<degree_program> engine1(dc, graph, "sync");
         
     engine.signal_all();
         
-    // Run KNN
+    // Calculate degrees
     dc.cout() << "Running ..." << std::endl;
     timer.start();
     engine.start();
@@ -288,10 +304,49 @@ int main(int argc, char** argv) {
             << "Update Rate (updates/second): " 
             << engine.num_updates() / runtime << std::endl;
             
-    engine.add_vertex_aggregator<float>("error",
-                                        error_vertex_data,
-                                        print_finalize);
-    engine.aggregate_now("error");
+            
+    dc.cout() << "Creating engine 2 (Init values + 2 iterations)" << std::endl;
+    graphlab::omni_engine<init_values_program> engine2(dc, graph, "sync");
+        
+    engine2.signal_all();
+        
+    // Run init values + first 2 iterations
+    dc.cout() << "Running ..." << std::endl;
+    timer.start();
+    engine2.start();
+
+    const double runtime = timer.current_time();
+    dc.cout() << "----------------------------------------------------------"
+            << std::endl
+            << "Final Runtime (seconds):   " << runtime 
+            << std::endl
+            << "Updates executed: " << engine.num_updates() << std::endl
+            << "Update Rate (updates/second): " 
+            << engine.num_updates() / runtime << std::endl;
+            
+    dc.cout() << "Creating engine 3 (Chebychev filtering iterations)" << std::endl;
+    graphlab::omni_engine<cheby_program> engine3(dc, graph, "sync");
+        
+    engine3.signal_all();
+        
+    // Run Iterative filtering operations
+    dc.cout() << "Running ..." << std::endl;
+    timer.start();
+    engine3.start();
+
+    const double runtime = timer.current_time();
+    dc.cout() << "----------------------------------------------------------"
+            << std::endl
+            << "Final Runtime (seconds):   " << runtime 
+            << std::endl
+            << "Updates executed: " << engine.num_updates() << std::endl
+            << "Update Rate (updates/second): " 
+            << engine.num_updates() / runtime << std::endl;
+    
+    graph.save("graph_filtered_signal", graph_signal_writer(),
+               false,    // do not gzip
+               true,     // save vertices
+               false);   // do not save edges
     
     graphlab::mpi_tools::finalize();
     return EXIT_SUCCESS;
