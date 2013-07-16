@@ -21,7 +21,8 @@ double a2 = (arange[1] + arange[0]) / 2;
 
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
-vector<double> coeff {2.23, 5.23, 0.19, 8.39};
+int vv[4] = {2.23, 5.23, 0.19, 8.39};
+std::vector<double> coeff(&vv[0], &v[0] + 4);
 unsigned int coeff_len = coeff.size();
 
 /** \brief index for the current iteration */
@@ -285,7 +286,7 @@ int main(int argc, char** argv) {
         << float(graph.num_local_edges())/graph.num_edges()
         << std::endl;
         
-    dc.cout() << "Creating engine 1 (Calculate degrees) << std::endl;
+    dc.cout() << "Creating engine 1 (Calculate degrees)" << std::endl;
     graphlab::omni_engine<degree_program> engine1(dc, graph, "sync");
         
     engine.signal_all();
