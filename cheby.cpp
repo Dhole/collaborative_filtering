@@ -21,7 +21,7 @@ double a2 = (arange[1] + arange[0]) / 2;
 
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
-int coeff[] = {2.23, 5.23, 0.19, 8.39};
+double coeff[] = {2.23, 5.23, 0.19, 8.39};
 //std::vector<double> coeff(&vv[0], &vv[0] + 4);
 unsigned int coeff_len = 4;
 
@@ -349,7 +349,7 @@ int main(int argc, char** argv) {
             << "Update Rate (updates/second): " 
             << engine3.num_updates() / runtime << std::endl;
 
-    graph.save("graph_filtered_signal.txt", graph_signal_writer(),
+    graph.save("graph_filtered_signal", graph_signal_writer(),
                false,    // do not gzip
                true,     // save vertices
                false);   // do not save edges
