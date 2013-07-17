@@ -63,7 +63,7 @@ struct vertex_data {
 /**
  * \brief The edge data stores the weights between movies.
  */
-struct edge_data {
+struct edge_data : public graphlab::IS_POD_TYPE {
     
     /** \brief the weight value for the edge */
     double wei;
@@ -129,7 +129,8 @@ struct graph_signal_writer {
  * \brief Compute the degree of each node and store it
  */
 class degree_program : 
-    public graphlab::ivertex_program<graph_type, double>
+    public graphlab::ivertex_program<graph_type, double>,
+    public graphlab::IS_POD_TYPE
     {
 public:
 
@@ -163,7 +164,8 @@ public:
  * Chebychev filtering.
  */
 class init_values_program :
-    public graphlab::ivertex_program<graph_type, double>
+    public graphlab::ivertex_program<graph_type, double>,
+    public graphlab::IS_POD_TYPE
     {
 public:
 
@@ -204,7 +206,8 @@ public:
  * \brief Compute the next Chebychev iterations.
  */
 class cheby_program :
-    public graphlab::ivertex_program<graph_type, double>
+    public graphlab::ivertex_program<graph_type, double>,
+    public graphlab::IS_POD_TYPE
     {
 public:
 
@@ -260,6 +263,8 @@ int main(int argc, char** argv) {
     graph.load("graph_signal", graph_signal_loader); 
     dc.cout() << "Loading graph. Finished in " 
     << timer.current_time() << std::endl;
+
+    dc.cout() << "Filter lenght: " << coeff_len << std::endl;
     
     dc.cout() << "Finalizing graph." << std::endl;
     timer.start();
@@ -289,21 +294,21 @@ int main(int argc, char** argv) {
     dc.cout() << "Creating engine 1 (Calculate degrees)" << std::endl;
     graphlab::omni_engine<degree_program> engine1(dc, graph, "sync");
         
-    engine.signal_all();
+    engine1.signal_all();
         
     // Calculate degrees
     dc.cout() << "Running ..." << std::endl;
     timer.start();
-    engine.start();
+    engine1.start();
 
-    const double runtime = timer.current_time();
+    double runtime = timer.current_time();
     dc.cout() << "----------------------------------------------------------"
             << std::endl
             << "Final Runtime (seconds):   " << runtime 
             << std::endl
-            << "Updates executed: " << engine.num_updates() << std::endl
+            << "Updates executed: " << engine1.num_updates() << std::endl
             << "Update Rate (updates/second): " 
-            << engine.num_updates() / runtime << std::endl;
+            << engine1.num_updates() / runtime << std::endl;
             
             
     dc.cout() << "Creating engine 2 (Init values + 2 iterations)" << std::endl;
@@ -316,14 +321,14 @@ int main(int argc, char** argv) {
     timer.start();
     engine2.start();
 
-    const double runtime = timer.current_time();
+    runtime = timer.current_time();
     dc.cout() << "----------------------------------------------------------"
             << std::endl
             << "Final Runtime (seconds):   " << runtime 
             << std::endl
-            << "Updates executed: " << engine.num_updates() << std::endl
+            << "Updates executed: " << engine2.num_updates() << std::endl
             << "Update Rate (updates/second): " 
-            << engine.num_updates() / runtime << std::endl;
+            << engine2.num_updates() / runtime << std::endl;
             
     dc.cout() << "Creating engine 3 (Chebychev filtering iterations)" << std::endl;
     graphlab::omni_engine<cheby_program> engine3(dc, graph, "sync");
@@ -335,14 +340,14 @@ int main(int argc, char** argv) {
     timer.start();
     engine3.start();
 
-    const double runtime = timer.current_time();
+    runtime = timer.current_time();
     dc.cout() << "----------------------------------------------------------"
             << std::endl
             << "Final Runtime (seconds):   " << runtime 
             << std::endl
-            << "Updates executed: " << engine.num_updates() << std::endl
+            << "Updates executed: " << engine3.num_updates() << std::endl
             << "Update Rate (updates/second): " 
-            << engine.num_updates() / runtime << std::endl;
+            << engine3.num_updates() / runtime << std::endl;
     
     graph.save("graph_filtered_signal", graph_signal_writer(),
                false,    // do not gzip
