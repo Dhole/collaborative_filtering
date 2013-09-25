@@ -41,7 +41,7 @@ struct vertex_data {
     vertex_data() { }
     
     vertex_data(double val): 
-    val(val), counter(2) { }
+    val(val) { }
 
     /** \brief Save the vertex data to a binary archive */
     void save(graphlab::oarchive& arc) const { 
