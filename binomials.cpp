@@ -1,10 +1,10 @@
 /**
- * \file cheby.cpp
+ * \file binomials.cpp
  * 
- * \brief Filtering operation using chebychev coefficients
+ * \brief Filtering operation using polynomial factorization (binomials) coefficients
  *
  * This file contains the code to apply the filtering operation using the 
- * chebychev coefficients as input.
+ * binomials coefficients from a polynomial factorization.
  */
 
 #include <string>
@@ -14,19 +14,14 @@
 
 using namespace graphlab;
 
-/** \brief Interval of operation */
-double arange[] = { 0.0, 2.0 };
-double a1 = (arange[1] - arange[0]) / 2;
-double a2 = (arange[1] + arange[0]) / 2;
-
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
-double coeff[] = {2.23, 5.23, 0.19, 8.39};
-//std::vector<double> coeff(&vv[0], &vv[0] + 4);
-unsigned int coeff_len = 4;
+//double coeff[] = {2.23, 5.23, 0.19};
+std::vector<double> coeff;
+unsigned int coeff_len;
 
 /** \brief index for the current iteration */
-//int ind = 0;
+int ind = 0;
 
 /**
  * \brief The vertex data stores the movie rating information.
@@ -37,12 +32,10 @@ struct vertex_data {
     double degree;
     
     /** \brief Values to store the temporal results of each iteration */
-    double twf_old, twf_cur, twf_new;
+    double tmp, part_a, part_b;
     
     /** \brief Signal value */
     double val;
-    
-    unsigned int counter;
 
     /** \brief basic initialization */
     vertex_data() { }
@@ -52,11 +45,11 @@ struct vertex_data {
 
     /** \brief Save the vertex data to a binary archive */
     void save(graphlab::oarchive& arc) const { 
-        arc << degree << twf_old << twf_cur << twf_new << val << counter;
+        arc << degree << tmp << part_a << part_b << val << counter;
     }
     /** \brief Load the vertex data from a binary archive */
     void load(graphlab::iarchive& arc) { 
-        arc >> degree >> twf_old >> twf_cur >> twf_new >> val >> counter;
+        arc >> degree >> tmp >> part_a >> part_b >> val >> counter;
     }
 }; // end of vertex data
 
@@ -91,8 +84,10 @@ bool graph_loader(graph_type& graph,
     double weight;
     
     strm >> va >> vb >> weight;
-    if (weight > 0.1)
+    if (weight > 0.1) {
         graph.add_edge(va, vb, edge_data(weight));
+        graph.add_edge(vb, va, edge_data(weight));
+    }
 
     return true; // successful load
 } // end of graph_loader
@@ -109,6 +104,25 @@ bool graph_signal_loader(graph_type& graph,
     strm >> vt >> val;
     
     graph.add_vertex(vt, vertex_data(val));
+
+    return true; // successful load
+} // end of graph_signal_loader
+
+bool filter_loader(graph_type& graph, 
+                   const std::string& filename,
+                   const std::string& line) {
+    
+    // Parse the line
+    std::stringstream strm(line);
+    double val;
+    
+    while (1) {
+        strm >> val;
+        if (strm.fail())
+            break;
+        coeff.push_back(val);
+    }
+    coeff_len = coeff.size();
 
     return true; // successful load
 } // end of graph_signal_loader
@@ -160,52 +174,9 @@ public:
 }; // end of degree program
 
 /**
- * \brief Compute the initial values and do the first iteration of the 
- * Chebychev filtering.
+ * \brief Compute the binomial operations step_a.
  */
-class init_values_program :
-    public graphlab::ivertex_program<graph_type, double>,
-    public graphlab::IS_POD_TYPE
-    {
-public:
-
-    /** The set of edges to gather along */
-    edge_dir_type gather_edges(icontext_type& context, 
-                                const vertex_type& vertex) const { 
-        return graphlab::OUT_EDGES;
-    }; // end of gather_edges 
-
-    /** The gather function */
-    double gather(icontext_type& context, const vertex_type& vertex, 
-                       edge_type& edge) const {
-        return edge.data().wei / (std::sqrt(
-               edge.target().data().degree * edge.source().data().degree))
-               * edge.target().data().val;
-    } // end of gather function
-
-    void apply(icontext_type& context, vertex_type& vertex,
-               const gather_type& sum) {
-        vertex.data().twf_old = vertex.data().val;
-        
-        vertex.data().twf_cur = (vertex.data().val - sum - 
-                                a2 * vertex.data().val) / a1;
-        
-        vertex.data().val = 0.5 * coeff[0] * vertex.data().twf_old
-                                + coeff[1] * vertex.data().twf_cur;
-    } // end of apply
-
-    // No scatter needed. Return NO_EDGES
-    edge_dir_type scatter_edges(icontext_type& context,
-                                const vertex_type& vertex) const {
-        return graphlab::NO_EDGES;
-    }
-
-}; // end of init values program
-
-/**
- * \brief Compute the next Chebychev iterations.
- */
-class cheby_program :
+class binomial_a_program :
     public graphlab::ivertex_program<graph_type, double>,
     public graphlab::IS_POD_TYPE
     {
@@ -222,24 +193,15 @@ public:
                        edge_type& edge) const {
         return edge.data().wei / (std::sqrt(
             edge.target().data().degree * edge.source().data().degree))
-            * edge.target().data().twf_cur;
+            * edge.target().data().val;
     } // end of gather function
 
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type& sum) {
-        vertex.data().twf_new = (2 / a1) * (vertex.data().twf_cur - sum
-                                - a2 * vertex.data().twf_cur)
-                                - vertex.data().twf_old;
         
-        vertex.data().val = vertex.data().val
-                            + coeff[vertex.data().counter] * vertex.data().twf_new;
-        
-        vertex.data().twf_old = vertex.data().twf_cur;
-        vertex.data().twf_cur = vertex.data().twf_new;
-        
-        vertex.data().counter++;
-        if (vertex.data().counter < coeff_len) 
-            context.signal(vertex);
+        vertex.data.part_a = (coeff[ind] + coeff[ind + 1]) * vertex.data.val;
+                             - coeff[ind + 1] * sum;
+        vertex.data.tmp = vertex.data.val - sum;
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -248,7 +210,45 @@ public:
         return graphlab::NO_EDGES;
     }
 
-}; // end of cheby program
+}; // end of binomial step_a program
+
+/**
+ * \brief Compute the binomial operations step_b.
+ */
+class binomial_b_program :
+    public graphlab::ivertex_program<graph_type, double>,
+    public graphlab::IS_POD_TYPE
+    {
+public:
+
+    /** The set of edges to gather along */
+    edge_dir_type gather_edges(icontext_type& context, 
+                                const vertex_type& vertex) const { 
+        return graphlab::OUT_EDGES;
+    }; // end of gather_edges 
+
+    /** The gather function */
+    double gather(icontext_type& context, const vertex_type& vertex, 
+                       edge_type& edge) const {
+        return edge.data().wei / (std::sqrt(
+            edge.target().data().degree * edge.source().data().degree))
+            * edge.target().data().tmp;
+    } // end of gather function
+
+    void apply(icontext_type& context, vertex_type& vertex,
+               const gather_type& sum) {
+        
+        vertex.data.part_b = coeff[ind + 2] * (vertex.data.tmp - sum);
+        veftex.data.val = vertex.data.part_a + vertex.data.part_b;
+    } // end of apply
+
+    // No scatter needed. Return NO_EDGES
+    edge_dir_type scatter_edges(icontext_type& context,
+                                const vertex_type& vertex) const {
+        return graphlab::NO_EDGES;
+    }
+
+}; // end of binomial step_b program
 
 int main(int argc, char** argv) {
     graphlab::mpi_tools::init(argc, argv);
@@ -257,6 +257,8 @@ int main(int argc, char** argv) {
     dc.cout() << "Loading graph." << std::endl;
     graphlab::timer timer; 
     graph_type graph(dc);
+    // Load the filter coefficients
+    graph.load("coeff", filter_loader);
     // Load the graph containing the weights and connections
     graph.load("graph_topology", graph_loader);
     // Load the signal of the graph
@@ -311,43 +313,49 @@ int main(int argc, char** argv) {
             << engine1.num_updates() / runtime << std::endl;
             
             
-    dc.cout() << "Creating engine 2 (Init values + 2 iterations)" << std::endl;
-    graphlab::omni_engine<init_values_program> engine2(dc, graph, "sync");
-        
-    engine2.signal_all();
-        
-    // Run init values + first 2 iterations
-    dc.cout() << "Running ..." << std::endl;
-    timer.start();
-    engine2.start();
+    dc.cout() << "Creating engine 2 iteration step_a" << std::endl;
+    graphlab::omni_engine<binomial_a_program> engine2(dc, graph, "sync");
+    
+    dc.cout() << "Creating engine 3 iteration steb_b" << std::endl;
+    graphlab::omni_engine<binomial_b_program> engine3(dc, graph, "sync");
+    
+    
+    for (unsigned int i = 0; i*3 < coeff_len; i++) {
+    
+        engine2.signal_all();
+    
+        // Run step_a
+        dc.cout() << "Running step a..." << std::endl;
+        timer.start();
+        engine2.start();
 
-    runtime = timer.current_time();
-    dc.cout() << "----------------------------------------------------------"
-            << std::endl
-            << "Final Runtime (seconds):   " << runtime 
-            << std::endl
-            << "Updates executed: " << engine2.num_updates() << std::endl
-            << "Update Rate (updates/second): " 
-            << engine2.num_updates() / runtime << std::endl;
+        runtime = timer.current_time();
+        dc.cout() << "----------------------------------------------------------"
+                << std::endl
+                << "Final Runtime (seconds):   " << runtime 
+                << std::endl
+                << "Updates executed: " << engine2.num_updates() << std::endl
+                << "Update Rate (updates/second): " 
+                << engine2.num_updates() / runtime << std::endl;
+                
             
-    dc.cout() << "Creating engine 3 (Chebychev filtering iterations)" << std::endl;
-    graphlab::omni_engine<cheby_program> engine3(dc, graph, "sync");
-        
-    engine3.signal_all();
-        
-    // Run Iterative filtering operations
-    dc.cout() << "Running ..." << std::endl;
-    timer.start();
-    engine3.start();
+        engine3.signal_all();
+            
+        // Run step_b
+        dc.cout() << "Running step b..." << std::endl;
+        timer.start();
+        engine3.start();
 
-    runtime = timer.current_time();
-    dc.cout() << "----------------------------------------------------------"
-            << std::endl
-            << "Final Runtime (seconds):   " << runtime 
-            << std::endl
-            << "Updates executed: " << engine3.num_updates() << std::endl
-            << "Update Rate (updates/second): " 
-            << engine3.num_updates() / runtime << std::endl;
+        runtime = timer.current_time();
+        dc.cout() << "----------------------------------------------------------"
+                << std::endl
+                << "Final Runtime (seconds):   " << runtime 
+                << std::endl
+                << "Updates executed: " << engine3.num_updates() << std::endl
+                << "Update Rate (updates/second): " 
+                << engine3.num_updates() / runtime << std::endl;
+        ind++;
+    }
 
     graph.save("graph_filtered_signal", graph_signal_writer(),
                false,    // do not gzip
