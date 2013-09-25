@@ -21,9 +21,9 @@ double a2 = (arange[1] + arange[0]) / 2;
 
 /** \brief vector to store the chebychev coefficients */
 // Use some random values for testing purposes
-double coeff[] = {2.23, 5.23, 0.19, 8.39};
-//std::vector<double> coeff(&vv[0], &vv[0] + 4);
-unsigned int coeff_len = 4;
+//double coeff[] = {2.23, 5.23, 0.19, 8.39};
+std::vector<double> coeff;
+unsigned int coeff_len;
 
 /** \brief index for the current iteration */
 //int ind = 0;
@@ -91,8 +91,10 @@ bool graph_loader(graph_type& graph,
     double weight;
     
     strm >> va >> vb >> weight;
-    if (weight > 0.1)
+    if (weight > 0.1) {
         graph.add_edge(va, vb, edge_data(weight));
+        graph.add_edge(vb, va, edge_data(weight));
+    }
 
     return true; // successful load
 } // end of graph_loader
@@ -109,6 +111,25 @@ bool graph_signal_loader(graph_type& graph,
     strm >> vt >> val;
     
     graph.add_vertex(vt, vertex_data(val));
+
+    return true; // successful load
+} // end of graph_signal_loader
+
+bool filter_loader(graph_type& graph, 
+                   const std::string& filename,
+                   const std::string& line) {
+    
+    // Parse the line
+    std::stringstream strm(line);
+    double val;
+    
+    while (1) {
+        strm >> val;
+        if (strm.fail())
+            break;
+        coeff.push_back(val);
+    }
+    coeff_len = coeff.size();
 
     return true; // successful load
 } // end of graph_signal_loader
@@ -257,6 +278,8 @@ int main(int argc, char** argv) {
     dc.cout() << "Loading graph." << std::endl;
     graphlab::timer timer; 
     graph_type graph(dc);
+    // Load the filter coefficients
+    graph.load("coeff", filter_loader);
     // Load the graph containing the weights and connections
     graph.load("graph_topology", graph_loader);
     // Load the signal of the graph
