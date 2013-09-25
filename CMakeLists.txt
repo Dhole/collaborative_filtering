@@ -49,3 +49,5 @@ add_graphlab_executable(local_calc_precomp local_calc_precomp.cpp)
 requires_eigen(local_calc) # build and attach eigen
 
 add_graphlab_executable(cheby cheby.cpp)
+
+add_graphlab_executable(binomials binomials.cpp)
