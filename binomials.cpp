@@ -45,11 +45,11 @@ struct vertex_data {
 
     /** \brief Save the vertex data to a binary archive */
     void save(graphlab::oarchive& arc) const { 
-        arc << degree << tmp << part_a << part_b << val << counter;
+        arc << degree << tmp << part_a << part_b << val;
     }
     /** \brief Load the vertex data from a binary archive */
     void load(graphlab::iarchive& arc) { 
-        arc >> degree >> tmp >> part_a >> part_b >> val >> counter;
+        arc >> degree >> tmp >> part_a >> part_b >> val;
     }
 }; // end of vertex data
 
@@ -199,9 +199,9 @@ public:
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type& sum) {
         
-        vertex.data.part_a = (coeff[ind] + coeff[ind + 1]) * vertex.data.val;
+        vertex.data().part_a = (coeff[ind] + coeff[ind + 1]) * vertex.data().val
                              - coeff[ind + 1] * sum;
-        vertex.data.tmp = vertex.data.val - sum;
+        vertex.data().tmp = vertex.data().val - sum;
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
@@ -238,8 +238,8 @@ public:
     void apply(icontext_type& context, vertex_type& vertex,
                const gather_type& sum) {
         
-        vertex.data.part_b = coeff[ind + 2] * (vertex.data.tmp - sum);
-        veftex.data.val = vertex.data.part_a + vertex.data.part_b;
+        vertex.data().part_b = coeff[ind + 2] * (vertex.data().tmp - sum);
+        vertex.data().val = vertex.data().part_a + vertex.data().part_b;
     } // end of apply
 
     // No scatter needed. Return NO_EDGES
